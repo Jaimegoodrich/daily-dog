@@ -1,8 +1,9 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { FullPageSpinner } from '@/components/ui/Spinner'
 import { Layout } from '@/components/Layout'
 import { Login } from '@/pages/Login'
+import { ResetPassword } from '@/pages/ResetPassword'
 import { Gallery } from '@/pages/Gallery'
 import { EmployeeDashboard } from '@/pages/employee/Dashboard'
 import { EmployeeSchedule } from '@/pages/employee/Schedule'
@@ -20,6 +21,9 @@ import { ClientForm } from '@/pages/admin/clients/ClientForm'
 
 function AppRoutes() {
   const { session, profile, loading } = useAuth()
+  const location = useLocation()
+
+  if (location.pathname === '/reset-password') return <ResetPassword />
 
   if (loading) return <FullPageSpinner />
   if (!session || !profile) return <Login />

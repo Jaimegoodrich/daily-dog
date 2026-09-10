@@ -156,6 +156,7 @@ function AdminLogin() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -164,6 +165,10 @@ function AdminLogin() {
     const { error } = await signInAdmin(email, password)
     setSubmitting(false)
     if (error) setError(error)
+  }
+
+  if (showForgot) {
+    return <ForgotPassword initialEmail={email} onBack={() => setShowForgot(false)} />
   }
 
   return (
@@ -186,6 +191,75 @@ function AdminLogin() {
       <Button type="submit" disabled={submitting} fullWidth>
         {submitting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Sign in'}
       </Button>
+      <button
+        type="button"
+        onClick={() => setShowForgot(true)}
+        className="text-center text-sm font-semibold text-ocean-600 hover:underline"
+      >
+        Forgot password?
+      </button>
+    </form>
+  )
+}
+
+function ForgotPassword({ initialEmail, onBack }: { initialEmail: string; onBack: () => void }) {
+  const [email, setEmail] = useState(initialEmail)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSubmitting(true)
+    setError(null)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setSubmitting(false)
+    if (error) {
+      setError(error.message)
+      return
+    }
+    setSent(true)
+  }
+
+  if (sent) {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center">
+        <p className="text-ocean-800">
+          If an account exists for <span className="font-semibold">{email}</span>, a password reset
+          link has been sent. Check your inbox.
+        </p>
+        <button onClick={onBack} className="text-sm font-semibold text-ocean-600 hover:underline">
+          ← Back to sign in
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <p className="text-sm text-ocean-700/70">
+        Enter your admin email and we'll send you a link to reset your password.
+      </p>
+      <Input
+        label="Email"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+      />
+      {error && <p className="text-sm font-semibold text-ocean-700">{error}</p>}
+      <Button type="submit" disabled={submitting} fullWidth>
+        {submitting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Send Reset Link'}
+      </Button>
+      <button
+        type="button"
+        onClick={onBack}
+        className="text-center text-sm font-semibold text-ocean-600 hover:underline"
+      >
+        ← Back to sign in
+      </button>
     </form>
   )
 }
