@@ -11,8 +11,8 @@ export function Login() {
   const [mode, setMode] = useState<'employee' | 'admin'>('employee')
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ocean-500 via-ocean-400 to-sun-300 p-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ocean-500 via-ocean-400 to-sun-300 p-3">
+      <div className="w-full max-w-md rounded-3xl bg-white px-5 py-8 sm:px-8">
         <h1 className="mb-1 text-center font-display text-3xl font-extrabold text-ocean-900">
           🐾 Daily Dog
         </h1>
@@ -110,7 +110,7 @@ function EmployeeLogin() {
       </div>
       {error && <p className="text-sm font-semibold text-ocean-700">{error}</p>}
       {submitting && <Spinner />}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2.5">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((key, i) => {
           if (key === '') return <div key={i} />
           if (key === '⌫') {
@@ -118,7 +118,7 @@ function EmployeeLogin() {
               <button
                 key={i}
                 onClick={() => setPin((p) => p.slice(0, -1))}
-                className="rounded-2xl bg-sand-100 py-4 font-display text-lg font-bold text-ocean-700 hover:bg-sand-200"
+                className="w-full rounded-2xl bg-sand-100 py-5 font-display text-xl font-bold text-ocean-700 hover:bg-sand-200"
               >
                 ⌫
               </button>
@@ -129,7 +129,7 @@ function EmployeeLogin() {
               key={i}
               disabled={submitting}
               onClick={() => setPin((p) => (p.length < 4 ? p + key : p))}
-              className="rounded-2xl bg-sand-100 py-4 font-display text-lg font-bold text-ocean-700 hover:bg-sand-200 disabled:opacity-50"
+              className="w-full rounded-2xl bg-sand-100 py-5 font-display text-xl font-bold text-ocean-700 hover:bg-sand-200 disabled:opacity-50"
             >
               {key}
             </button>
