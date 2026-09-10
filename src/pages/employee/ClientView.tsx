@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
+import { formatPhone } from '@/lib/format'
 import type { Child, Client, Dog, HouseholdMember, HouseholdRole } from '@/types/database'
 
 const ROLE_LABELS: Record<HouseholdRole, string> = {
@@ -113,7 +114,7 @@ export function EmployeeClientView() {
           {children.map((c) => (
             <p key={c.id} className="text-sm text-ocean-800">
               <span className="font-semibold">{c.name}</span>
-              {c.phone && <> — {c.phone}</>}
+              {c.phone && <> — {formatPhone(c.phone)}</>}
             </p>
           ))}
         </Card>
@@ -126,7 +127,7 @@ export function EmployeeClientView() {
             <p key={m.id} className="text-sm text-ocean-800">
               <span className="font-semibold">{m.name}</span>
               {m.role && <> — {ROLE_LABELS[m.role]}</>}
-              {m.phone && <> — {m.phone}</>}
+              {m.phone && <> — {formatPhone(m.phone)}</>}
             </p>
           ))}
         </Card>
@@ -163,7 +164,7 @@ export function EmployeeClientView() {
             <Field label="Feeding Instructions" value={dog.feeding_instructions} />
             <Field label="Primary Vet" value={dog.vet_name} />
             <Field label="Vet Clinic" value={dog.vet_clinic_name} />
-            <Field label="Vet Phone" value={dog.vet_phone} />
+            <Field label="Vet Phone" value={dog.vet_phone ? formatPhone(dog.vet_phone) : null} />
           </Card>
         ))}
         {dogs.length === 0 && <p className="text-sm text-ocean-700/50">No dogs on file.</p>}
@@ -197,7 +198,7 @@ function ContactBlock({
     <div className="mb-2">
       <p className="text-xs font-semibold uppercase text-ocean-700/50">{title}</p>
       <p className="text-sm text-ocean-800">
-        {[name, role ? ROLE_LABELS[role] : null, phone].filter(Boolean).join(' — ')}
+        {[name, role ? ROLE_LABELS[role] : null, phone ? formatPhone(phone) : null].filter(Boolean).join(' — ')}
       </p>
     </div>
   )
