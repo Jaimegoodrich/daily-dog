@@ -8,6 +8,7 @@ import { CancelScheduleForm } from '@/components/CancelScheduleForm'
 import type { Dog, ScheduleEntry } from '@/types/database'
 
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 function pad(n: number) {
   return String(n).padStart(2, '0')
@@ -215,31 +216,41 @@ export function WeeklySchedule() {
               ))}
             </div>
 
-            <p className="mb-2 mt-4 text-sm font-semibold text-ocean-800">Default route per day</p>
-            <div className="flex gap-2">
-              {WEEKDAY_LABELS.map((_, day) => (
-                <div key={day} className="w-10">
-                  {pattern.has(day) ? (
-                    <Select
-                      value={pattern.get(day) ?? ''}
-                      onChange={(e) => setDayRoute(day, e.target.value ? Number(e.target.value) : null)}
-                      className="w-10 px-1 py-1.5 text-center text-xs"
-                    >
-                      <option value="">–</option>
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                    </Select>
-                  ) : null}
+            {pattern.size > 0 && (
+              <div className="mt-5 rounded-2xl bg-sun-50 p-4">
+                <p className="mb-3 font-display font-bold text-ocean-900">
+                  🚐 Default Route — pick which route this dog rides on each hike day
+                </p>
+                <div className="flex flex-col gap-2">
+                  {WEEKDAY_FULL.map((fullLabel, day) =>
+                    pattern.has(day) ? (
+                      <div
+                        key={day}
+                        className="flex items-center justify-between gap-3 rounded-xl bg-white px-4 py-3"
+                      >
+                        <p className="font-semibold text-ocean-900">{fullLabel}</p>
+                        <Select
+                          value={pattern.get(day) ?? ''}
+                          onChange={(e) => setDayRoute(day, e.target.value ? Number(e.target.value) : null)}
+                          className="w-40"
+                        >
+                          <option value="">No default route</option>
+                          <option value="1">Route 1</option>
+                          <option value="2">Route 2</option>
+                          <option value="3">Route 3</option>
+                        </Select>
+                      </div>
+                    ) : null
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
 
-            <p className="mt-2 text-xs text-ocean-700/50">
+            <p className="mt-3 text-xs text-ocean-700/50">
               Toggling a day sets the recurring schedule for every week going forward. Set a default
-              route per day so the dog auto-fills onto that route number whenever it's built, e.g.
-              M/W/F → Route 1, T/Th → Route 2. Turning a day off only stops future weeks —
-              already-scheduled upcoming days need to be cancelled individually below.
+              route per day above so the dog auto-fills onto that route number whenever it's built,
+              e.g. Mon/Wed/Fri → Route 1, Tue/Thu → Route 2. Turning a day off only stops future
+              weeks — already-scheduled upcoming days need to be cancelled individually below.
             </p>
           </Card>
 
