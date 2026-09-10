@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/Card'
-import { Input } from '@/components/ui/Field'
+import { Input, Select } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { CancelScheduleForm } from '@/components/CancelScheduleForm'
@@ -27,7 +27,7 @@ export function WeeklySchedule() {
   const [selectedDog, setSelectedDog] = useState<Dog | null>(null)
   const [year, setYear] = useState(new Date().getFullYear())
   const [month, setMonth] = useState(new Date().getMonth() + 1)
-  const [pattern, setPattern] = useState<Set<number>>(new Set())
+  const [pattern, setPattern] = useState<Map<number, number | null>>(new Map())
   const [entries, setEntries] = useState<ScheduleEntry[] | null>(null)
   const [cancelTarget, setCancelTarget] = useState<ScheduleEntry | null>(null)
   const [loading, setLoading] = useState(false)
@@ -57,7 +57,7 @@ export function WeeklySchedule() {
         .lt('check_in_date', dateStr(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, 1)),
     ])
 
-    setPattern(new Set((patternRows ?? []).map((p) => p.day_of_week)))
+    setPattern(new Map((patternRows ?? []).map((p) => [p.day_of_week, p.default_route_number])))
     setEntries(entryRows ?? [])
     setLoading(false)
   }
@@ -80,6 +80,25 @@ export function WeeklySchedule() {
     const nextMonth = month === 12 ? 1 : month + 1
     const nextYear = month === 12 ? year + 1 : year
     await supabase.rpc('ensure_schedule_for_month', { p_year: nextYear, p_month: nextMonth })
+    loadMonth()
+  }
+
+  async function setDayRoute(day: number, routeNumber: number | null) {
+    if (!selectedDog) return
+    await supabase.rpc('set_default_route', {
+      p_dog_id: selectedDog.id,
+      p_day_of_week: day,
+      p_route_number: routeNumber,
+    })
+    // If routes already exist for occurrences of this weekday in the visible
+    // month, slot the dog into them right away instead of waiting for the
+    // next time someone opens the Routes page.
+    const matchingDates = (entries ?? [])
+      .filter((e) => new Date(e.check_in_date + 'T00:00:00').getDay() === day)
+      .map((e) => e.check_in_date)
+    for (const d of matchingDates) {
+      await supabase.rpc('apply_default_routes_for_date', { p_date: d })
+    }
     loadMonth()
   }
 
@@ -195,10 +214,32 @@ export function WeeklySchedule() {
                 </button>
               ))}
             </div>
+
+            <p className="mb-2 mt-4 text-sm font-semibold text-ocean-800">Default route per day</p>
+            <div className="flex gap-2">
+              {WEEKDAY_LABELS.map((_, day) => (
+                <div key={day} className="w-10">
+                  {pattern.has(day) ? (
+                    <Select
+                      value={pattern.get(day) ?? ''}
+                      onChange={(e) => setDayRoute(day, e.target.value ? Number(e.target.value) : null)}
+                      className="w-10 px-1 py-1.5 text-center text-xs"
+                    >
+                      <option value="">–</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                    </Select>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
             <p className="mt-2 text-xs text-ocean-700/50">
-              Toggling a day sets the recurring schedule for every week going forward. Turning a day
-              off only stops future weeks — already-scheduled upcoming days need to be cancelled
-              individually below.
+              Toggling a day sets the recurring schedule for every week going forward. Set a default
+              route per day so the dog auto-fills onto that route number whenever it's built, e.g.
+              M/W/F → Route 1, T/Th → Route 2. Turning a day off only stops future weeks —
+              already-scheduled upcoming days need to be cancelled individually below.
             </p>
           </Card>
 
