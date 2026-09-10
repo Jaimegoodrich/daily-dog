@@ -11,23 +11,27 @@ export function Login() {
   const [mode, setMode] = useState<'employee' | 'admin'>('employee')
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ocean-500 via-ocean-400 to-sun-300 p-3">
-      <div className="w-full max-w-md rounded-3xl bg-white px-5 py-8 sm:px-8">
-        <h1 className="mb-1 text-center font-display text-3xl font-extrabold text-ocean-900">
-          🐾 Daily Dog
-        </h1>
-        <p className="mb-6 text-center text-ocean-700/70">
-          {mode === 'employee' ? "Tap your name to start your day" : 'Admin sign in'}
-        </p>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ocean-500 via-ocean-400 to-sun-300 p-2">
+      <div className="w-full max-w-4xl rounded-3xl bg-white px-4 py-8">
+        <div className="mx-auto max-w-md">
+          <h1 className="mb-1 text-center font-display text-3xl font-extrabold text-ocean-900">
+            🐾 Daily Dog
+          </h1>
+          <p className="mb-6 text-center text-ocean-700/70">
+            {mode === 'employee' ? "Tap your name to start your day" : 'Admin sign in'}
+          </p>
+        </div>
 
-        {mode === 'employee' ? <EmployeeLogin /> : <AdminLogin />}
+        {mode === 'employee' ? <EmployeeLogin /> : <div className="mx-auto max-w-md"><AdminLogin /></div>}
 
-        <button
-          onClick={() => setMode(mode === 'employee' ? 'admin' : 'employee')}
-          className="mt-6 w-full text-center text-sm font-semibold text-ocean-600 hover:underline"
-        >
-          {mode === 'employee' ? 'Admin sign in' : 'Back to employee sign in'}
-        </button>
+        <div className="mx-auto max-w-md">
+          <button
+            onClick={() => setMode(mode === 'employee' ? 'admin' : 'employee')}
+            className="mt-6 w-full text-center text-sm font-semibold text-ocean-600 hover:underline"
+          >
+            {mode === 'employee' ? 'Admin sign in' : 'Back to employee sign in'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -76,7 +80,7 @@ function EmployeeLogin() {
 
   if (!selected) {
     return (
-      <div className="grid grid-cols-2 gap-3">
+      <div className="mx-auto grid max-w-md grid-cols-2 gap-3">
         {employees.map((emp) => (
           <button
             key={emp.id}
@@ -96,7 +100,7 @@ function EmployeeLogin() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="mx-auto flex max-w-3xl flex-col items-center gap-4">
       <p className="font-display text-lg font-bold text-ocean-800">Hi, {selected.display_name}!</p>
       <div className="flex gap-3">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -110,7 +114,7 @@ function EmployeeLogin() {
       </div>
       {error && <p className="text-sm font-semibold text-ocean-700">{error}</p>}
       {submitting && <Spinner />}
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid w-full grid-cols-3 gap-2.5">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((key, i) => {
           if (key === '') return <div key={i} />
           if (key === '⌫') {
