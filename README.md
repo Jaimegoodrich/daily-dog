@@ -1,32 +1,40 @@
-# React + TypeScript + Vite
+# Daily Dog
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Dog hiking/boarding operations app — client & dog profiles, recurring weekly
+hike schedules, route building, employee PIN login with pickup/dropoff/farm
+time tracking, daily and weekly reports, and a tagged photo gallery.
 
-Currently, two official plugins are available:
+**Live app:** https://daily-dog-five.vercel.app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+- Vite + React + TypeScript, Tailwind CSS
+- Supabase (Postgres, Auth, Storage, Edge Functions)
+- Deployed on Vercel, auto-deploying from the `main` branch
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local development
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+cp .env.example .env.local   # fill in your Supabase project URL + anon key
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Database
+
+`supabase/schema.sql` is the full schema (run once on a fresh Supabase
+project). Everything after that ships as numbered files under
+`supabase/migrations/` — run new ones in order against the SQL Editor as
+they're added.
+
+Two Edge Functions handle auth:
+- `pin-login` — exchanges an employee's 4-digit PIN for a session
+- `admin-create-employee` — lets an admin create employee (PIN-based) or
+  additional admin (email/password) accounts
+
+Deploy them with:
+
+```bash
+supabase functions deploy pin-login --no-verify-jwt
+supabase functions deploy admin-create-employee
+```
