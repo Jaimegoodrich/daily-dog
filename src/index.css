@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  /* Beachy palette: ocean blue, sun yellow, warm sand */
+  --color-ocean-50: #eff9ff;
+  --color-ocean-100: #d9f1ff;
+  --color-ocean-200: #b8e6ff;
+  --color-ocean-300: #86d6ff;
+  --color-ocean-400: #4dbdff;
+  --color-ocean-500: #1f9fff;
+  --color-ocean-600: #0c80ec;
+  --color-ocean-700: #0967c4;
+  --color-ocean-800: #0d549e;
+  --color-ocean-900: #10477d;
+
+  --color-sun-50: #fffbea;
+  --color-sun-100: #fff3c4;
+  --color-sun-200: #ffe58a;
+  --color-sun-300: #ffd24d;
+  --color-sun-400: #ffbe1f;
+  --color-sun-500: #f9a207;
+  --color-sun-600: #dc7c04;
+  --color-sun-700: #b65a08;
+  --color-sun-800: #92460e;
+  --color-sun-900: #783b0f;
+
+  --color-sand-50: #fffdf8;
+  --color-sand-100: #fef8ec;
+  --color-sand-200: #fcecd0;
+  --color-sand-300: #f8dba8;
+  --color-sand-400: #f1c374;
+
+  --font-display: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --font-body: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-sand-50);
+  color: var(--color-ocean-900);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: var(--font-display);
+}
