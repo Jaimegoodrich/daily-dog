@@ -5,6 +5,7 @@ import { Layout } from '@/components/Layout'
 import { Login } from '@/pages/Login'
 import { Gallery } from '@/pages/Gallery'
 import { EmployeeDashboard } from '@/pages/employee/Dashboard'
+import { EmployeeSchedule } from '@/pages/employee/Schedule'
 import { RouteRun } from '@/pages/employee/RouteRun'
 import { EndOfShift } from '@/pages/employee/EndOfShift'
 import { AdminDashboard } from '@/pages/admin/Dashboard'
@@ -56,12 +57,14 @@ function AppRoutes() {
 
   const navItems = [
     { to: '/today', label: 'Today' },
+    { to: '/schedule', label: 'Schedule' },
     { to: '/gallery', label: 'Gallery' },
   ]
   return (
     <Layout navItems={navItems}>
       <Routes>
         <Route path="/today" element={<EmployeeDashboard />} />
+        <Route path="/schedule" element={<EmployeeSchedule />} />
         <Route path="/route/:routeId" element={<RouteRun />} />
         <Route path="/end-of-shift/:routeId" element={<EndOfShift />} />
         <Route path="/gallery" element={<Gallery />} />
