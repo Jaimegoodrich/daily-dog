@@ -12,6 +12,10 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function dayOfWeek(dateStr: string) {
+  return new Date(dateStr + 'T00:00:00').getDay()
+}
+
 export function AdminRoutes() {
   const [date, setDate] = useState(todayStr())
   const [routes, setRoutes] = useState<Route[]>([])
@@ -25,6 +29,9 @@ export function AdminRoutes() {
     // has opened the Weekly Schedule page for it yet.
     const [year, month] = date.split('-').map(Number)
     await supabase.rpc('ensure_schedule_for_month', { p_year: year, p_month: month })
+    // Auto-slot dogs onto their default route for this weekday, if one is set
+    // and a route with that number already exists for this date.
+    await supabase.rpc('apply_default_routes_for_date', { p_date: date })
 
     const [{ data: routeData }, { data: entryData }, { data: employeeData }] = await Promise.all([
       supabase.from('routes').select('*').eq('date', date).order('route_number'),
@@ -56,12 +63,24 @@ export function AdminRoutes() {
     load()
   }
 
+  async function rememberDefaultRoute(entryId: string, routeId: string) {
+    const route = routes.find((r) => r.id === routeId)
+    const entry = entries.find((e) => e.id === entryId)
+    if (!route || !entry) return
+    await supabase.rpc('set_default_route', {
+      p_dog_id: entry.dog_id,
+      p_day_of_week: dayOfWeek(date),
+      p_route_number: route.route_number,
+    })
+  }
+
   async function assignPickup(entryId: string, routeId: string) {
     const routeEntries = entries.filter((e) => e.pickup_route_id === routeId)
     await supabase
       .from('schedule_entries')
       .update({ pickup_route_id: routeId || null, pickup_route_order: routeEntries.length })
       .eq('id', entryId)
+    if (routeId) await rememberDefaultRoute(entryId, routeId)
     load()
   }
 
@@ -71,6 +90,7 @@ export function AdminRoutes() {
       .from('schedule_entries')
       .update({ dropoff_route_id: routeId || null, dropoff_route_order: routeEntries.length })
       .eq('id', entryId)
+    if (routeId) await rememberDefaultRoute(entryId, routeId)
     load()
   }
 

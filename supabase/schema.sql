@@ -128,8 +128,23 @@ create table schedule_entries (
   actual_dropoff_at timestamptz,
   pickup_issue_notes text,
   dropoff_issue_notes text,
+  cancelled boolean not null default false,
+  cancel_reason text check (cancel_reason in ('vet', 'grooming', 'vacation', 'injury', 'other')),
+  late_cancel boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+-- Recurring weekly hike pattern per dog: which weekdays a dog hikes by
+-- default, and optionally which route number they default onto for that
+-- weekday (day_of_week matches JS Date.getDay() / Postgres extract(dow)).
+create table dog_weekly_pattern (
+  id uuid primary key default gen_random_uuid(),
+  dog_id uuid not null references dogs (id) on delete cascade,
+  day_of_week int not null check (day_of_week between 0 and 6),
+  default_route_number int check (default_route_number between 1 and 3),
+  created_at timestamptz not null default now(),
+  unique (dog_id, day_of_week)
 );
 
 create table daily_reports (
@@ -269,6 +284,133 @@ $$;
 
 grant execute on function admin_set_employee_pin(uuid, text) to authenticated;
 
+-- Backfills hike-type schedule_entries for every dog's recurring pattern,
+-- for one calendar month. Idempotent: only inserts days that don't already
+-- have an entry, so manually-added or already-cancelled days are untouched.
+-- Called from the admin UI whenever a month is viewed, so upcoming weeks
+-- are always populated without needing a scheduled job.
+create function ensure_schedule_for_month(p_year int, p_month int)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_start date := make_date(p_year, p_month, 1);
+  v_end date := (v_start + interval '1 month')::date;
+  v_day date;
+begin
+  if not is_admin() then
+    raise exception 'Only admin can generate schedule';
+  end if;
+
+  v_day := v_start;
+  while v_day < v_end loop
+    insert into schedule_entries (
+      dog_id, type, check_in_date, check_out_date, scheduled_pickup_date, scheduled_dropoff_date
+    )
+    select dwp.dog_id, 'hike', v_day, v_day, v_day, v_day
+    from dog_weekly_pattern dwp
+    where dwp.day_of_week = extract(dow from v_day)
+      and not exists (
+        select 1 from schedule_entries se
+        where se.dog_id = dwp.dog_id and se.type = 'hike' and se.check_in_date = v_day
+      );
+    v_day := v_day + interval '1 day';
+  end loop;
+end;
+$$;
+
+grant execute on function ensure_schedule_for_month(int, int) to authenticated;
+
+-- Called by the client whenever admin assigns a dog's pickup or dropoff to a
+-- route, to remember that route number as the default for this weekday.
+create function set_default_route(p_dog_id uuid, p_day_of_week int, p_route_number int)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not is_admin() then
+    raise exception 'Only admin can set default routes';
+  end if;
+
+  insert into dog_weekly_pattern (dog_id, day_of_week, default_route_number)
+  values (p_dog_id, p_day_of_week, p_route_number)
+  on conflict (dog_id, day_of_week)
+  do update set default_route_number = excluded.default_route_number;
+end;
+$$;
+
+grant execute on function set_default_route(uuid, int, int) to authenticated;
+
+-- Fills in pickup_route_id/dropoff_route_id for any of the date's hike
+-- entries that are missing one, using each dog's default route number for
+-- that weekday, if a route with that number already exists for the date.
+-- Safe to call repeatedly (only ever fills in nulls, never overrides a
+-- manual assignment).
+create function apply_default_routes_for_date(p_date date)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_dow int := extract(dow from p_date);
+  v_entry record;
+  v_route_id uuid;
+  v_next_order int;
+begin
+  if not is_admin() then
+    raise exception 'Only admin can apply default routes';
+  end if;
+
+  for v_entry in
+    select se.id, dwp.default_route_number
+    from schedule_entries se
+    join dog_weekly_pattern dwp on dwp.dog_id = se.dog_id and dwp.day_of_week = v_dow
+    where se.type = 'hike'
+      and se.check_in_date = p_date
+      and se.cancelled = false
+      and se.pickup_route_id is null
+      and dwp.default_route_number is not null
+    order by se.created_at
+  loop
+    select id into v_route_id from routes where date = p_date and route_number = v_entry.default_route_number;
+    if v_route_id is not null then
+      select coalesce(max(pickup_route_order) + 1, 0) into v_next_order
+      from schedule_entries where pickup_route_id = v_route_id;
+      update schedule_entries set pickup_route_id = v_route_id, pickup_route_order = v_next_order
+      where id = v_entry.id;
+    end if;
+  end loop;
+
+  for v_entry in
+    select se.id, dwp.default_route_number
+    from schedule_entries se
+    join dog_weekly_pattern dwp on dwp.dog_id = se.dog_id and dwp.day_of_week = v_dow
+    where se.type = 'hike'
+      and se.check_out_date = p_date
+      and se.cancelled = false
+      and se.late_pickup_by_owner = false
+      and se.dropoff_route_id is null
+      and dwp.default_route_number is not null
+    order by se.created_at
+  loop
+    select id into v_route_id from routes where date = p_date and route_number = v_entry.default_route_number;
+    if v_route_id is not null then
+      select coalesce(max(dropoff_route_order) + 1, 0) into v_next_order
+      from schedule_entries where dropoff_route_id = v_route_id;
+      update schedule_entries set dropoff_route_id = v_route_id, dropoff_route_order = v_next_order
+      where id = v_entry.id;
+    end if;
+  end loop;
+end;
+$$;
+
+grant execute on function apply_default_routes_for_date(date) to authenticated;
+
 -- ==========================================================================
 -- ROW LEVEL SECURITY
 -- ==========================================================================
@@ -281,6 +423,7 @@ alter table household_members enable row level security;
 alter table dogs enable row level security;
 alter table routes enable row level security;
 alter table schedule_entries enable row level security;
+alter table dog_weekly_pattern enable row level security;
 alter table daily_reports enable row level security;
 alter table photos enable row level security;
 alter table photo_tags enable row level security;
@@ -342,6 +485,14 @@ create policy "schedule_entries_select_authenticated" on schedule_entries for se
 create policy "schedule_entries_admin_write" on schedule_entries for insert with check (is_admin());
 create policy "schedule_entries_admin_update" on schedule_entries for update using (is_admin()) with check (is_admin());
 create policy "schedule_entries_admin_delete" on schedule_entries for delete using (is_admin());
+
+-- dog_weekly_pattern
+create policy "dog_weekly_pattern_select_authenticated" on dog_weekly_pattern for select
+  using (auth.role() = 'authenticated');
+create policy "dog_weekly_pattern_admin_insert" on dog_weekly_pattern for insert
+  with check (is_admin());
+create policy "dog_weekly_pattern_admin_delete" on dog_weekly_pattern for delete
+  using (is_admin());
 
 -- daily_reports
 create policy "daily_reports_select" on daily_reports for select
