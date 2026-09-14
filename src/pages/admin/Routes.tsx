@@ -1,114 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/Card'
 import { Select, Input } from '@/components/ui/Field'
 import { Spinner } from '@/components/ui/Spinner'
-import type { Client, Dog, Route, ScheduleEntry } from '@/types/database'
-
-type EntryWithDog = ScheduleEntry & { dog: Dog & { client: Client } }
-type EmployeeOption = { id: string; display_name: string }
+import { useRoutesForDay, type EntryWithDog } from '@/hooks/useRoutesForDay'
+import type { Route } from '@/types/database'
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function dayOfWeek(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').getDay()
-}
-
 export function AdminRoutes() {
   const [date, setDate] = useState(todayStr())
-  const [routes, setRoutes] = useState<Route[]>([])
-  const [entries, setEntries] = useState<EntryWithDog[]>([])
-  const [employees, setEmployees] = useState<EmployeeOption[]>([])
-  const [loading, setLoading] = useState(true)
-
-  async function load() {
-    setLoading(true)
-    // Safety net: backfill this month's recurring hike days even if nobody
-    // has opened the Weekly Schedule page for it yet.
-    const [year, month] = date.split('-').map(Number)
-    await supabase.rpc('ensure_schedule_for_month', { p_year: year, p_month: month })
-    // Auto-slot dogs onto their default route for this weekday, if one is set
-    // and a route with that number already exists for this date.
-    await supabase.rpc('apply_default_routes_for_date', { p_date: date })
-
-    const [{ data: routeData }, { data: entryData }, { data: employeeData }] = await Promise.all([
-      supabase.from('routes').select('*').eq('date', date).order('route_number'),
-      supabase
-        .from('schedule_entries')
-        .select('*, dog:dogs(*, client:clients(*))')
-        .or(`scheduled_pickup_date.eq.${date},scheduled_dropoff_date.eq.${date}`)
-        .eq('cancelled', false),
-      supabase.rpc('list_active_employees'),
-    ])
-    setRoutes(routeData ?? [])
-    setEntries((entryData as EntryWithDog[] | null) ?? [])
-    setEmployees(employeeData ?? [])
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date])
-
-  async function setRouteEmployee(routeNumber: number, employeeId: string) {
-    const existing = routes.find((r) => r.route_number === routeNumber)
-    if (existing) {
-      await supabase.from('routes').update({ employee_id: employeeId || null }).eq('id', existing.id)
-    } else if (employeeId) {
-      await supabase.from('routes').insert({ date, route_number: routeNumber, employee_id: employeeId })
-    }
-    load()
-  }
-
-  async function rememberDefaultRoute(entryId: string, routeId: string) {
-    const route = routes.find((r) => r.id === routeId)
-    const entry = entries.find((e) => e.id === entryId)
-    if (!route || !entry) return
-    await supabase.rpc('set_default_route', {
-      p_dog_id: entry.dog_id,
-      p_day_of_week: dayOfWeek(date),
-      p_route_number: route.route_number,
-    })
-  }
-
-  async function assignPickup(entryId: string, routeId: string) {
-    const routeEntries = entries.filter((e) => e.pickup_route_id === routeId)
-    await supabase
-      .from('schedule_entries')
-      .update({ pickup_route_id: routeId || null, pickup_route_order: routeEntries.length })
-      .eq('id', entryId)
-    if (routeId) await rememberDefaultRoute(entryId, routeId)
-    load()
-  }
-
-  async function assignDropoff(entryId: string, routeId: string) {
-    const routeEntries = entries.filter((e) => e.dropoff_route_id === routeId)
-    await supabase
-      .from('schedule_entries')
-      .update({ dropoff_route_id: routeId || null, dropoff_route_order: routeEntries.length })
-      .eq('id', entryId)
-    if (routeId) await rememberDefaultRoute(entryId, routeId)
-    load()
-  }
-
-  async function reorder(
-    list: EntryWithDog[],
-    field: 'pickup_route_order' | 'dropoff_route_order',
-    fromIndex: number,
-    toIndex: number
-  ) {
-    if (fromIndex === toIndex) return
-    const reordered = [...list]
-    const [moved] = reordered.splice(fromIndex, 1)
-    reordered.splice(toIndex, 0, moved)
-    await Promise.all(
-      reordered.map((entry, i) => supabase.from('schedule_entries').update({ [field]: i }).eq('id', entry.id))
-    )
-    load()
-  }
+  const { routes, entries, employees, loading, setRouteEmployee, setDefaultRoute, assignPickup, assignDropoff, reorder } =
+    useRoutesForDay(date)
 
   if (loading) {
     return (
@@ -118,8 +22,9 @@ export function AdminRoutes() {
     )
   }
 
-  const unassignedPickups = entries.filter((e) => e.scheduled_pickup_date === date && !e.pickup_route_id)
-  const unassignedDropoffs = entries.filter(
+  const activeEntries = entries.filter((e) => !e.cancelled)
+  const unassignedPickups = activeEntries.filter((e) => e.scheduled_pickup_date === date && !e.pickup_route_id)
+  const unassignedDropoffs = activeEntries.filter(
     (e) => e.scheduled_dropoff_date === date && !e.dropoff_route_id && !e.late_pickup_by_owner
   )
 
@@ -175,10 +80,10 @@ export function AdminRoutes() {
       </div>
 
       {routes.map((route) => {
-        const pickupList = entries
+        const pickupList = activeEntries
           .filter((e) => e.pickup_route_id === route.id)
           .sort((a, b) => (a.pickup_route_order ?? 0) - (b.pickup_route_order ?? 0))
-        const dropoffList = entries
+        const dropoffList = activeEntries
           .filter((e) => e.dropoff_route_id === route.id)
           .sort((a, b) => (a.dropoff_route_order ?? 0) - (b.dropoff_route_order ?? 0))
 
@@ -191,12 +96,14 @@ export function AdminRoutes() {
                 list={pickupList}
                 onReorder={(from, to) => reorder(pickupList, 'pickup_route_order', from, to)}
                 onRemove={(id) => assignPickup(id, '')}
+                onSetDefault={(id) => setDefaultRoute(id, route.id)}
               />
               <OrderedList
                 title="Dropoffs"
                 list={dropoffList}
                 onReorder={(from, to) => reorder(dropoffList, 'dropoff_route_order', from, to)}
                 onRemove={(id) => assignDropoff(id, '')}
+                onSetDefault={(id) => setDefaultRoute(id, route.id)}
               />
             </div>
           </div>
@@ -238,11 +145,13 @@ function OrderedList({
   list,
   onReorder,
   onRemove,
+  onSetDefault,
 }: {
   title: string
   list: EntryWithDog[]
   onReorder: (fromIndex: number, toIndex: number) => void
   onRemove: (id: string) => void
+  onSetDefault: (id: string) => void
 }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -340,9 +249,18 @@ function OrderedList({
               </span>
               {i + 1}. {entry.dog.name}
             </p>
-            <button onClick={() => onRemove(entry.id)} className="text-sm text-ocean-700">
-              ✕
-            </button>
+            <div className="flex items-center gap-3 text-sm">
+              <button
+                onClick={() => onSetDefault(entry.id)}
+                title="Make this route the default for this dog on this weekday"
+                className="text-ocean-700/50 hover:text-ocean-700"
+              >
+                ☆ Set default
+              </button>
+              <button onClick={() => onRemove(entry.id)} className="text-ocean-700">
+                ✕
+              </button>
+            </div>
           </Card>
         ))}
         {list.length === 0 && <p className="text-sm text-ocean-700/50">None assigned.</p>}

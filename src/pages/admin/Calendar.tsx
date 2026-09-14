@@ -6,9 +6,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Input, Select } from '@/components/ui/Field'
 import { Spinner } from '@/components/ui/Spinner'
 import { CancelScheduleForm } from '@/components/CancelScheduleForm'
-import type { Client, Dog, ScheduleEntry, ScheduleType } from '@/types/database'
-
-type EntryWithDog = ScheduleEntry & { dog: Dog & { client: Client } }
+import { useRoutesForDay, type EntryWithDog } from '@/hooks/useRoutesForDay'
+import type { Dog, Route, ScheduleEntry, ScheduleType } from '@/types/database'
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -22,36 +21,28 @@ function addDays(dateStr: string, days: number) {
 
 export function AdminCalendar() {
   const [date, setDate] = useState(todayStr())
-  const [entries, setEntries] = useState<EntryWithDog[] | null>(null)
+  const { routes, entries, loading, load, assignPickup, assignDropoff, setDefaultRoute } = useRoutesForDay(date)
   const [editing, setEditing] = useState<Partial<ScheduleEntry> | null>(null)
   const [cancelTarget, setCancelTarget] = useState<ScheduleEntry | null>(null)
-
-  async function load() {
-    // Safety net: backfill this month's recurring hike days even if nobody
-    // has opened the Weekly Schedule page for it yet.
-    const [year, month] = date.split('-').map(Number)
-    await supabase.rpc('ensure_schedule_for_month', { p_year: year, p_month: month })
-
-    const { data } = await supabase
-      .from('schedule_entries')
-      .select('*, dog:dogs(*, client:clients(*))')
-      .or(`scheduled_pickup_date.eq.${date},scheduled_dropoff_date.eq.${date}`)
-    setEntries((data as EntryWithDog[] | null) ?? [])
-  }
-
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date])
-
-  const pickups = entries?.filter((e) => e.scheduled_pickup_date === date) ?? []
-  const dropoffs = entries?.filter((e) => e.scheduled_dropoff_date === date) ?? []
 
   async function handleDelete(id: string) {
     if (!confirm('Remove this schedule entry?')) return
     await supabase.from('schedule_entries').delete().eq('id', id)
     load()
   }
+
+  const activePickups = entries.filter((e) => e.scheduled_pickup_date === date && !e.cancelled)
+  const activeDropoffs = entries.filter(
+    (e) => e.scheduled_dropoff_date === date && !e.cancelled && !e.late_pickup_by_owner
+  )
+  const ownerDropoffs = entries.filter(
+    (e) => e.scheduled_dropoff_date === date && !e.cancelled && e.late_pickup_by_owner
+  )
+  const cancelledToday = entries.filter(
+    (e) => e.cancelled && (e.scheduled_pickup_date === date || e.scheduled_dropoff_date === date)
+  )
+  const unassignedPickups = activePickups.filter((e) => !e.pickup_route_id)
+  const unassignedDropoffs = activeDropoffs.filter((e) => !e.dropoff_route_id)
 
   return (
     <div>
@@ -62,7 +53,7 @@ export function AdminCalendar() {
         </Button>
       </div>
 
-      <div className="mb-6 flex items-center justify-center gap-4">
+      <div className="mb-8 flex items-center justify-center gap-4">
         <button onClick={() => setDate(addDays(date, -1))} className="text-2xl text-ocean-600">
           ‹
         </button>
@@ -72,29 +63,101 @@ export function AdminCalendar() {
         </button>
       </div>
 
-      {entries === null && (
+      {loading && (
         <div className="flex justify-center py-10">
           <Spinner className="h-8 w-8" />
         </div>
       )}
 
-      {entries && (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <EntrySection
-            title="🚗 Picking Up"
-            entries={pickups}
-            onEdit={setEditing}
-            onDelete={handleDelete}
-            onCancel={setCancelTarget}
-          />
-          <EntrySection
-            title="🏠 Dropping Off"
-            entries={dropoffs}
-            onEdit={setEditing}
-            onDelete={handleDelete}
-            onCancel={setCancelTarget}
-          />
-        </div>
+      {!loading && (
+        <>
+          {routes.map((route) => {
+            const pickupList = activePickups
+              .filter((e) => e.pickup_route_id === route.id)
+              .sort((a, b) => (a.pickup_route_order ?? 0) - (b.pickup_route_order ?? 0))
+            const dropoffList = activeDropoffs
+              .filter((e) => e.dropoff_route_id === route.id)
+              .sort((a, b) => (a.dropoff_route_order ?? 0) - (b.dropoff_route_order ?? 0))
+
+            return (
+              <div key={route.id} className="mb-8">
+                <h2 className="mb-3 font-display text-xl font-bold text-ocean-900">Route {route.route_number}</h2>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <RouteColumn
+                    title="🚗 Picking Up"
+                    entries={pickupList}
+                    routes={routes}
+                    field="pickup"
+                    onAssign={assignPickup}
+                    onSetDefault={setDefaultRoute}
+                    onEdit={setEditing}
+                    onCancel={setCancelTarget}
+                    onDelete={handleDelete}
+                  />
+                  <RouteColumn
+                    title="🏠 Dropping Off"
+                    entries={dropoffList}
+                    routes={routes}
+                    field="dropoff"
+                    onAssign={assignDropoff}
+                    onSetDefault={setDefaultRoute}
+                    onEdit={setEditing}
+                    onCancel={setCancelTarget}
+                    onDelete={handleDelete}
+                  />
+                </div>
+              </div>
+            )
+          })}
+
+          <div className="mb-8">
+            <h2 className="mb-3 font-display text-xl font-bold text-ocean-900">Unassigned</h2>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <RouteColumn
+                title="🚗 Picking Up"
+                entries={unassignedPickups}
+                routes={routes}
+                field="pickup"
+                onAssign={assignPickup}
+                onSetDefault={setDefaultRoute}
+                onEdit={setEditing}
+                onCancel={setCancelTarget}
+                onDelete={handleDelete}
+              />
+              <RouteColumn
+                title="🏠 Dropping Off"
+                entries={unassignedDropoffs}
+                routes={routes}
+                field="dropoff"
+                onAssign={assignDropoff}
+                onSetDefault={setDefaultRoute}
+                onEdit={setEditing}
+                onCancel={setCancelTarget}
+                onDelete={handleDelete}
+              />
+            </div>
+          </div>
+
+          {ownerDropoffs.length > 0 && (
+            <div className="mb-8">
+              <h2 className="mb-3 font-display text-xl font-bold text-ocean-900">Late Pickup by Owner</h2>
+              <p className="mb-3 text-sm text-ocean-700/60">No employee dropoff needed for these.</p>
+              <SimpleEntryList
+                entries={ownerDropoffs}
+                onEdit={setEditing}
+                onCancel={setCancelTarget}
+                onDelete={handleDelete}
+              />
+            </div>
+          )}
+
+          {cancelledToday.length > 0 && (
+            <div className="mb-8">
+              <h2 className="mb-3 font-display text-xl font-bold text-ocean-900">Cancelled</h2>
+              <SimpleEntryList entries={cancelledToday} onEdit={setEditing} onDelete={handleDelete} />
+            </div>
+          )}
+        </>
       )}
 
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit Entry' : 'Schedule Dog'}>
@@ -125,68 +188,149 @@ export function AdminCalendar() {
   )
 }
 
-function EntrySection({
+function EntryBadges({ entry }: { entry: EntryWithDog }) {
+  return (
+    <>
+      <span
+        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+          entry.type === 'boarding' ? 'bg-ocean-800 text-white' : 'bg-ocean-100 text-ocean-700'
+        }`}
+      >
+        {entry.type === 'boarding' ? 'Boarding' : 'Daily Hike'}
+      </span>
+      {entry.late_pickup_by_owner && (
+        <span className="ml-2 mt-1 inline-block rounded-full bg-sun-100 px-2 py-0.5 text-xs font-semibold text-sun-700">
+          Late pickup by owner
+        </span>
+      )}
+      {entry.cancelled && (
+        <span className="ml-2 mt-1 inline-block rounded-full bg-sand-300 px-2 py-0.5 text-xs font-semibold text-ocean-800">
+          Cancelled — {entry.cancel_reason}
+          {entry.late_cancel ? ' (LATE CANCEL)' : ''}
+        </span>
+      )}
+    </>
+  )
+}
+
+function RouteColumn({
   title,
   entries,
+  routes,
+  field,
+  onAssign,
+  onSetDefault,
   onEdit,
-  onDelete,
   onCancel,
+  onDelete,
 }: {
   title: string
   entries: EntryWithDog[]
+  routes: Route[]
+  field: 'pickup' | 'dropoff'
+  onAssign: (entryId: string, routeId: string) => void
+  onSetDefault: (entryId: string, routeId: string) => void
   onEdit: (e: ScheduleEntry) => void
-  onDelete: (id: string) => void
   onCancel: (e: ScheduleEntry) => void
+  onDelete: (id: string) => void
 }) {
   return (
     <div>
-      <h2 className="mb-3 font-display text-lg font-bold text-ocean-800">{title}</h2>
+      <h3 className="mb-2 font-semibold text-ocean-800">{title}</h3>
       <div className="flex flex-col gap-3">
-        {entries.map((entry) => (
-          <Card key={entry.id} className={entry.cancelled ? 'bg-sand-100' : ''}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className={`font-display font-bold text-ocean-900 ${entry.cancelled ? 'line-through' : ''}`}>
-                  {entry.dog.name}
-                </p>
-                <p className="text-sm text-ocean-700/70">{entry.dog.client.main_name}</p>
-                <span
-                  className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    entry.type === 'boarding' ? 'bg-ocean-800 text-white' : 'bg-ocean-100 text-ocean-700'
-                  }`}
-                >
-                  {entry.type === 'boarding' ? 'Boarding' : 'Daily Hike'}
-                </span>
-                {entry.late_pickup_by_owner && (
-                  <span className="ml-2 mt-1 inline-block rounded-full bg-sun-100 px-2 py-0.5 text-xs font-semibold text-sun-700">
-                    Late pickup by owner
-                  </span>
-                )}
-                {entry.cancelled && (
-                  <span className="ml-2 mt-1 inline-block rounded-full bg-sand-300 px-2 py-0.5 text-xs font-semibold text-ocean-800">
-                    Cancelled — {entry.cancel_reason}
-                    {entry.late_cancel ? ' (LATE CANCEL)' : ''}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-1 text-sm">
-                <button onClick={() => onEdit(entry)} className="font-semibold text-ocean-600 hover:underline">
-                  Edit
-                </button>
-                {!entry.cancelled && (
+        {entries.map((entry) => {
+          const currentRouteId = field === 'pickup' ? entry.pickup_route_id : entry.dropoff_route_id
+          return (
+            <Card key={entry.id}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-display font-bold text-ocean-900">{entry.dog.name}</p>
+                  <p className="text-sm text-ocean-700/70">{entry.dog.client.main_name}</p>
+                  <EntryBadges entry={entry} />
+                </div>
+                <div className="flex flex-col items-end gap-1 text-sm">
+                  <button onClick={() => onEdit(entry)} className="font-semibold text-ocean-600 hover:underline">
+                    Edit
+                  </button>
                   <button onClick={() => onCancel(entry)} className="font-semibold text-ocean-800 hover:underline">
                     Cancel
                   </button>
-                )}
-                <button onClick={() => onDelete(entry.id)} className="font-semibold text-ocean-700 hover:underline">
-                  Remove
-                </button>
+                  <button onClick={() => onDelete(entry.id)} className="font-semibold text-ocean-700 hover:underline">
+                    Remove
+                  </button>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
-        {entries.length === 0 && <p className="text-sm text-ocean-700/50">Nothing scheduled.</p>}
+              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-sand-100 pt-3">
+                <Select
+                  value={currentRouteId ?? ''}
+                  onChange={(e) => onAssign(entry.id, e.target.value)}
+                  className="w-40"
+                >
+                  <option value="">Unassigned</option>
+                  {routes.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      Route {r.route_number}
+                    </option>
+                  ))}
+                </Select>
+                {currentRouteId && (
+                  <button
+                    onClick={() => onSetDefault(entry.id, currentRouteId)}
+                    title="Make this route the default for this dog on this weekday"
+                    className="text-xs font-semibold text-ocean-700/50 hover:text-ocean-700"
+                  >
+                    ☆ Set as default
+                  </button>
+                )}
+              </div>
+            </Card>
+          )
+        })}
+        {entries.length === 0 && <p className="text-sm text-ocean-700/50">Nothing here.</p>}
       </div>
+    </div>
+  )
+}
+
+function SimpleEntryList({
+  entries,
+  onEdit,
+  onCancel,
+  onDelete,
+}: {
+  entries: EntryWithDog[]
+  onEdit: (e: ScheduleEntry) => void
+  onCancel?: (e: ScheduleEntry) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {entries.map((entry) => (
+        <Card key={entry.id} className={entry.cancelled ? 'bg-sand-100' : ''}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className={`font-display font-bold text-ocean-900 ${entry.cancelled ? 'line-through' : ''}`}>
+                {entry.dog.name}
+              </p>
+              <p className="text-sm text-ocean-700/70">{entry.dog.client.main_name}</p>
+              <EntryBadges entry={entry} />
+            </div>
+            <div className="flex flex-col items-end gap-1 text-sm">
+              <button onClick={() => onEdit(entry)} className="font-semibold text-ocean-600 hover:underline">
+                Edit
+              </button>
+              {onCancel && !entry.cancelled && (
+                <button onClick={() => onCancel(entry)} className="font-semibold text-ocean-800 hover:underline">
+                  Cancel
+                </button>
+              )}
+              <button onClick={() => onDelete(entry.id)} className="font-semibold text-ocean-700 hover:underline">
+                Remove
+              </button>
+            </div>
+          </div>
+        </Card>
+      ))}
     </div>
   )
 }
