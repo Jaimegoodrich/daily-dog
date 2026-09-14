@@ -249,6 +249,8 @@ function OrderedList({
   const [dragOffset, setDragOffset] = useState(0)
   const startY = useRef(0)
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
+  const dragIndexRef = useRef<number | null>(null)
+  const overIndexRef = useRef<number | null>(null)
 
   function indexAtPoint(clientY: number, excludeIndex: number) {
     for (let i = 0; i < rowRefs.current.length; i++) {
@@ -260,28 +262,57 @@ function OrderedList({
   }
 
   function handlePointerDown(e: React.PointerEvent, i: number) {
+    e.preventDefault()
     startY.current = e.clientY
+    dragIndexRef.current = i
+    overIndexRef.current = i
     setDragIndex(i)
     setOverIndex(i)
     setDragOffset(0)
-    e.currentTarget.setPointerCapture(e.pointerId)
   }
 
-  function handlePointerMove(e: React.PointerEvent) {
+  // Track the drag via window-level listeners rather than pointer capture on
+  // the handle: WebKit/Safari has known bugs where setPointerCapture silently
+  // stops delivering pointermove events for touch, which broke dragging on
+  // phones entirely.
+  useEffect(() => {
     if (dragIndex === null) return
-    setDragOffset(e.clientY - startY.current)
-    const hit = indexAtPoint(e.clientY, dragIndex)
-    if (hit !== null) setOverIndex(hit)
-  }
 
-  function endDrag() {
-    if (dragIndex !== null && overIndex !== null && overIndex !== dragIndex) {
-      onReorder(dragIndex, overIndex)
+    function handleMove(e: PointerEvent) {
+      e.preventDefault()
+      setDragOffset(e.clientY - startY.current)
+      const hit = indexAtPoint(e.clientY, dragIndexRef.current!)
+      if (hit !== null) {
+        overIndexRef.current = hit
+        setOverIndex(hit)
+      }
     }
-    setDragIndex(null)
-    setOverIndex(null)
-    setDragOffset(0)
-  }
+
+    function handleUp() {
+      if (
+        dragIndexRef.current !== null &&
+        overIndexRef.current !== null &&
+        overIndexRef.current !== dragIndexRef.current
+      ) {
+        onReorder(dragIndexRef.current, overIndexRef.current)
+      }
+      dragIndexRef.current = null
+      overIndexRef.current = null
+      setDragIndex(null)
+      setOverIndex(null)
+      setDragOffset(0)
+    }
+
+    window.addEventListener('pointermove', handleMove, { passive: false })
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragIndex])
 
   return (
     <div>
@@ -300,12 +331,10 @@ function OrderedList({
           >
             <p className="flex items-center gap-2 font-semibold text-ocean-900">
               <span
-                className="-m-2 cursor-grab select-none p-2 text-lg text-ocean-700/40 active:cursor-grabbing"
-                style={{ touchAction: 'none' }}
+                className="-m-2 flex h-11 w-11 cursor-grab select-none items-center justify-center text-xl text-ocean-700/40 active:cursor-grabbing"
+                style={{ touchAction: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                 onPointerDown={(e) => handlePointerDown(e, i)}
-                onPointerMove={handlePointerMove}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
+                onContextMenu={(e) => e.preventDefault()}
               >
                 ⠿
               </span>
