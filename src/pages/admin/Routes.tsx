@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/Card'
 import { Select, Input } from '@/components/ui/Field'
@@ -94,15 +94,19 @@ export function AdminRoutes() {
     load()
   }
 
-  async function reorder(list: EntryWithDog[], field: 'pickup_route_order' | 'dropoff_route_order', index: number, dir: -1 | 1) {
-    const target = index + dir
-    if (target < 0 || target >= list.length) return
-    const a = list[index]
-    const b = list[target]
-    await Promise.all([
-      supabase.from('schedule_entries').update({ [field]: target }).eq('id', a.id),
-      supabase.from('schedule_entries').update({ [field]: index }).eq('id', b.id),
-    ])
+  async function reorder(
+    list: EntryWithDog[],
+    field: 'pickup_route_order' | 'dropoff_route_order',
+    fromIndex: number,
+    toIndex: number
+  ) {
+    if (fromIndex === toIndex) return
+    const reordered = [...list]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+    await Promise.all(
+      reordered.map((entry, i) => supabase.from('schedule_entries').update({ [field]: i }).eq('id', entry.id))
+    )
     load()
   }
 
@@ -185,15 +189,13 @@ export function AdminRoutes() {
               <OrderedList
                 title="Pickups"
                 list={pickupList}
-                onUp={(i) => reorder(pickupList, 'pickup_route_order', i, -1)}
-                onDown={(i) => reorder(pickupList, 'pickup_route_order', i, 1)}
+                onReorder={(from, to) => reorder(pickupList, 'pickup_route_order', from, to)}
                 onRemove={(id) => assignPickup(id, '')}
               />
               <OrderedList
                 title="Dropoffs"
                 list={dropoffList}
-                onUp={(i) => reorder(dropoffList, 'dropoff_route_order', i, -1)}
-                onDown={(i) => reorder(dropoffList, 'dropoff_route_order', i, 1)}
+                onReorder={(from, to) => reorder(dropoffList, 'dropoff_route_order', from, to)}
                 onRemove={(id) => assignDropoff(id, '')}
               />
             </div>
@@ -234,36 +236,83 @@ function UnassignedRow({
 function OrderedList({
   title,
   list,
-  onUp,
-  onDown,
+  onReorder,
   onRemove,
 }: {
   title: string
   list: EntryWithDog[]
-  onUp: (i: number) => void
-  onDown: (i: number) => void
+  onReorder: (fromIndex: number, toIndex: number) => void
   onRemove: (id: string) => void
 }) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
+  const [dragOffset, setDragOffset] = useState(0)
+  const startY = useRef(0)
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  function indexAtPoint(clientY: number) {
+    for (let i = 0; i < rowRefs.current.length; i++) {
+      const rect = rowRefs.current[i]?.getBoundingClientRect()
+      if (rect && clientY >= rect.top && clientY <= rect.bottom) return i
+    }
+    return null
+  }
+
+  function handlePointerDown(e: React.PointerEvent, i: number) {
+    startY.current = e.clientY
+    setDragIndex(i)
+    setOverIndex(i)
+    setDragOffset(0)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (dragIndex === null) return
+    setDragOffset(e.clientY - startY.current)
+    const hit = indexAtPoint(e.clientY)
+    if (hit !== null) setOverIndex(hit)
+  }
+
+  function endDrag() {
+    if (dragIndex !== null && overIndex !== null && overIndex !== dragIndex) {
+      onReorder(dragIndex, overIndex)
+    }
+    setDragIndex(null)
+    setOverIndex(null)
+    setDragOffset(0)
+  }
+
   return (
     <div>
       <p className="mb-2 font-semibold text-ocean-800">{title}</p>
       <div className="flex flex-col gap-2">
         {list.map((entry, i) => (
-          <Card key={entry.id} className="flex items-center justify-between py-2">
-            <p className="font-semibold text-ocean-900">
+          <Card
+            key={entry.id}
+            ref={(el) => {
+              rowRefs.current[i] = el
+            }}
+            className={`flex items-center justify-between py-2 ${
+              dragIndex === i ? 'relative z-10 shadow-lg' : ''
+            } ${overIndex === i && dragIndex !== i ? 'ring-2 ring-ocean-400' : ''}`}
+            style={dragIndex === i ? { transform: `translateY(${dragOffset}px)` } : undefined}
+          >
+            <p className="flex items-center gap-2 font-semibold text-ocean-900">
+              <span
+                className="-m-2 cursor-grab select-none p-2 text-lg text-ocean-700/40 active:cursor-grabbing"
+                style={{ touchAction: 'none' }}
+                onPointerDown={(e) => handlePointerDown(e, i)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+              >
+                ⠿
+              </span>
               {i + 1}. {entry.dog.name}
             </p>
-            <div className="flex gap-2 text-sm">
-              <button onClick={() => onUp(i)} disabled={i === 0} className="disabled:opacity-30">
-                ↑
-              </button>
-              <button onClick={() => onDown(i)} disabled={i === list.length - 1} className="disabled:opacity-30">
-                ↓
-              </button>
-              <button onClick={() => onRemove(entry.id)} className="text-ocean-700">
-                ✕
-              </button>
-            </div>
+            <button onClick={() => onRemove(entry.id)} className="text-sm text-ocean-700">
+              ✕
+            </button>
           </Card>
         ))}
         {list.length === 0 && <p className="text-sm text-ocean-700/50">None assigned.</p>}
