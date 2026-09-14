@@ -250,8 +250,9 @@ function OrderedList({
   const startY = useRef(0)
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
 
-  function indexAtPoint(clientY: number) {
+  function indexAtPoint(clientY: number, excludeIndex: number) {
     for (let i = 0; i < rowRefs.current.length; i++) {
+      if (i === excludeIndex) continue
       const rect = rowRefs.current[i]?.getBoundingClientRect()
       if (rect && clientY >= rect.top && clientY <= rect.bottom) return i
     }
@@ -269,7 +270,7 @@ function OrderedList({
   function handlePointerMove(e: React.PointerEvent) {
     if (dragIndex === null) return
     setDragOffset(e.clientY - startY.current)
-    const hit = indexAtPoint(e.clientY)
+    const hit = indexAtPoint(e.clientY, dragIndex)
     if (hit !== null) setOverIndex(hit)
   }
 
