@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import { downloadCSV } from '@/lib/csv'
+import { downloadCSV, downloadText } from '@/lib/csv'
 import type { DailyReport, Dog, Employee, Route, ScheduleEntry } from '@/types/database'
 
 const WEEKDAY_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -192,6 +192,68 @@ export function WeeklyReport() {
     downloadCSV(`weekly-report-${weekStart}.csv`, rows)
   }
 
+  function handleExportText() {
+    const allEntries = entries ?? []
+    const lines: string[] = []
+    lines.push('Daily Dog — Weekly Report')
+    lines.push(`${formatDate(weekStart)} to ${formatDate(weekEnd)}`)
+    lines.push('')
+
+    lines.push(`CANCELLATIONS (${cancellations.length})`)
+    if (cancellations.length === 0) lines.push('  None')
+    for (const e of cancellations) {
+      lines.push(
+        `  ${formatDate(e.check_in_date)} — ${e.dog.name}: ${REASON_LABELS[e.cancel_reason ?? 'other']}${e.late_cancel ? ' (LATE CANCEL)' : ''}`
+      )
+    }
+    lines.push('')
+
+    lines.push(`ADDS (${adds.length})`)
+    if (adds.length === 0) lines.push('  None')
+    for (const e of adds) {
+      lines.push(`  ${formatDate(e.check_in_date)} — ${e.dog.name} added outside their regular schedule`)
+    }
+    lines.push('')
+
+    lines.push(`ISSUES (${entryIssues.length + reportIssues.length})`)
+    if (entryIssues.length === 0 && reportIssues.length === 0) lines.push('  None')
+    for (const r of reportIssues) lines.push(`  ${formatDate(r.date)} — ${r.source} (${r.type}): ${r.note}`)
+    for (const e of entryIssues) lines.push(`  ${formatDate(e.date)} — ${e.dog} (${e.type}): ${e.note}`)
+    lines.push('')
+
+    lines.push('DOGS BY DAY & ROUTE')
+    for (const date of weekDates) {
+      const dayRoutes = routes.filter((r) => r.date === date)
+      if (dayRoutes.length === 0) continue
+      lines.push(`  ${formatDate(date)}`)
+      for (const route of dayRoutes) {
+        const dogs = allEntries
+          .filter((e) => e.pickup_route_id === route.id)
+          .sort((a, b) => (a.pickup_route_order ?? 0) - (b.pickup_route_order ?? 0))
+          .map((e) => e.dog.name)
+        lines.push(
+          `    ${route.employee?.display_name ?? 'Unassigned'} — Route ${route.route_number}: ${dogs.length > 0 ? dogs.join(', ') : 'no dogs'}`
+        )
+      }
+    }
+    lines.push('')
+
+    lines.push('DOGS BY DOG')
+    for (const dogId of dogIds) {
+      const perDay = weekDates.map((date) => {
+        const entry = allEntries.find((e) => e.dog_id === dogId && e.check_in_date === date)
+        if (!entry) return '—'
+        if (entry.cancelled) return `${REASON_LABELS[entry.cancel_reason ?? 'other']} (cancelled)`
+        return 'Scheduled'
+      })
+      lines.push(
+        `  ${dogNames.get(dogId)}: ${weekDates.map((d, i) => `${WEEKDAY_SHORT[dayOfWeek(d)]} ${perDay[i]}`).join(', ')}`
+      )
+    }
+
+    downloadText(`weekly-report-${weekStart}.txt`, lines.join('\n'))
+  }
+
   function prevWeek() {
     setWeekStart(addDays(weekStart, -7))
   }
@@ -203,9 +265,14 @@ export function WeeklyReport() {
     <div>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-extrabold text-ocean-900">📊 Weekly Report</h1>
-        <Button variant="ghost" onClick={handleExport}>
-          ⬇ Export CSV
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="ghost" onClick={handleExport}>
+            ⬇ Export CSV
+          </Button>
+          <Button variant="ghost" onClick={handleExportText}>
+            📄 Export Text
+          </Button>
+        </div>
       </div>
       <p className="mb-6 text-ocean-700/70">Cancellations, adds, issues, and route rosters for the week.</p>
 

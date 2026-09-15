@@ -10,9 +10,8 @@ export function toCSV(rows: unknown[][]): string {
   return rows.map((row) => row.map(escapeCell).join(',')).join('\n')
 }
 
-export function downloadCSV(filename: string, rows: unknown[][]) {
-  const csv = toCSV(rows)
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+function downloadBlob(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -20,5 +19,16 @@ export function downloadCSV(filename: string, rows: unknown[][]) {
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+  // Safari can abandon the download if the blob URL is revoked before it
+  // finishes reading it, since the read happens asynchronously after
+  // click() returns — give it a moment before cleaning up.
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export function downloadCSV(filename: string, rows: unknown[][]) {
+  downloadBlob(filename, toCSV(rows), 'text/csv;charset=utf-8;')
+}
+
+export function downloadText(filename: string, content: string) {
+  downloadBlob(filename, content, 'text/plain;charset=utf-8;')
 }

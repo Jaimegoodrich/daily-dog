@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Field'
 import { Spinner } from '@/components/ui/Spinner'
-import { downloadCSV } from '@/lib/csv'
+import { downloadCSV, downloadText } from '@/lib/csv'
 import type { DailyReport, Dog, Employee, Route, ScheduleEntry } from '@/types/database'
 
 type ReportRow = DailyReport & { employee: Employee | null; route: Route | null }
@@ -96,6 +96,50 @@ export function AdminReports() {
     downloadCSV(`daily-report-${date}.csv`, rows)
   }
 
+  function handleExportText() {
+    const lines: string[] = []
+    lines.push('Daily Dog — Daily Report')
+    lines.push(date)
+    lines.push('')
+
+    if (!reports || reports.length === 0) {
+      lines.push('No reports submitted for this date yet.')
+    }
+
+    for (const r of reports ?? []) {
+      const routeEntries = entriesByRoute.get(r.route_id) ?? []
+      const pickups = routeEntries
+        .filter((e) => e.pickup_route_id === r.route_id)
+        .sort((a, b) => (a.pickup_route_order ?? 0) - (b.pickup_route_order ?? 0))
+      const dropoffs = routeEntries
+        .filter((e) => e.dropoff_route_id === r.route_id)
+        .sort((a, b) => (a.dropoff_route_order ?? 0) - (b.dropoff_route_order ?? 0))
+
+      lines.push(
+        `${r.employee?.display_name ?? 'Unknown'} — Route ${r.route?.route_number ?? '?'} (submitted ${new Date(r.submitted_at).toLocaleTimeString()})`
+      )
+      if (pickups.length > 0) {
+        lines.push('  Pickups:')
+        for (const e of pickups) lines.push(`    ${e.dog.name} — ${formatTime(e.actual_pickup_at)}`)
+      }
+      if (dropoffs.length > 0) {
+        lines.push('  Dropoffs:')
+        for (const e of dropoffs) lines.push(`    ${e.dog.name} — ${formatTime(e.actual_dropoff_at)}`)
+      }
+      if (r.route?.arrived_at_farm_at || r.route?.left_farm_at) {
+        lines.push(
+          `  Farm: Arrived ${formatTime(r.route?.arrived_at_farm_at ?? null)}, Left ${formatTime(r.route?.left_farm_at ?? null)}`
+        )
+      }
+      lines.push(`  Van issues: ${r.van_issues ?? 'none'}`)
+      lines.push(`  Farm issues: ${r.farm_issues ?? 'none'}`)
+      lines.push(`  Client issues: ${r.client_issues ?? 'none'}`)
+      lines.push('')
+    }
+
+    downloadText(`daily-report-${date}.txt`, lines.join('\n'))
+  }
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -104,6 +148,9 @@ export function AdminReports() {
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" />
           <Button variant="ghost" onClick={handleExport} disabled={!reports || reports.length === 0}>
             ⬇ Export CSV
+          </Button>
+          <Button variant="ghost" onClick={handleExportText} disabled={!reports || reports.length === 0}>
+            📄 Export Text
           </Button>
         </div>
       </div>
