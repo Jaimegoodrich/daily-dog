@@ -218,12 +218,24 @@ function PickupCard({
   const [note, setNote] = useState('')
   const [showNote, setShowNote] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const done = entry.pickup_status === 'picked_up'
+  const busy = submitting || cancelling
 
   async function handleLog() {
     setSubmitting(true)
     await supabase.rpc('log_pickup', { p_schedule_entry_id: entry.id, p_note: note || undefined })
     setSubmitting(false)
+    onLogged()
+  }
+
+  async function handleLateCancel() {
+    if (!confirm(`Mark ${entry.dog.name} as a late cancel? This cancels today's hike since the dog wasn't there.`)) {
+      return
+    }
+    setCancelling(true)
+    await supabase.rpc('log_late_cancel', { p_schedule_entry_id: entry.id, p_note: note || undefined })
+    setCancelling(false)
     onLogged()
   }
 
@@ -234,9 +246,18 @@ function PickupCard({
         {done ? (
           <span className="font-semibold text-green-600">Picked up ✅</span>
         ) : (
-          <Button onClick={handleLog} disabled={submitting}>
-            {submitting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Log Pickup'}
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <Button onClick={handleLog} disabled={busy}>
+              {submitting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Log Pickup'}
+            </Button>
+            <button
+              onClick={handleLateCancel}
+              disabled={busy}
+              className="text-xs font-semibold text-ocean-700/60 hover:text-ocean-800 disabled:opacity-50"
+            >
+              {cancelling ? 'Cancelling…' : '🚫 Not there — late cancel'}
+            </button>
+          </div>
         )}
       </div>
       {entry.dog.client.gate_code && (
