@@ -24,8 +24,8 @@ export function useRoutesForDay(date: string) {
   const [employees, setEmployees] = useState<EmployeeOption[]>([])
   const [loading, setLoading] = useState(true)
 
-  async function load() {
-    setLoading(true)
+  async function load(showSpinner = true) {
+    if (showSpinner) setLoading(true)
     // Safety net: backfill this month's recurring hike days even if nobody
     // has opened the Weekly Schedule page for it yet.
     const [year, month] = date.split('-').map(Number)
@@ -64,7 +64,7 @@ export function useRoutesForDay(date: string) {
     } else if (employeeId) {
       await supabase.from('routes').insert({ date, route_number: routeNumber, employee_id: employeeId })
     }
-    load()
+    load(false)
   }
 
   async function setDefaultRoute(entryId: string, routeId: string) {
@@ -84,7 +84,7 @@ export function useRoutesForDay(date: string) {
       .from('schedule_entries')
       .update({ pickup_route_id: routeId || null, pickup_route_order: routeEntries.length })
       .eq('id', entryId)
-    load()
+    load(false)
   }
 
   async function assignDropoff(entryId: string, routeId: string) {
@@ -93,7 +93,7 @@ export function useRoutesForDay(date: string) {
       .from('schedule_entries')
       .update({ dropoff_route_id: routeId || null, dropoff_route_order: routeEntries.length })
       .eq('id', entryId)
-    load()
+    load(false)
   }
 
   async function reorder(
@@ -109,7 +109,7 @@ export function useRoutesForDay(date: string) {
     await Promise.all(
       reordered.map((entry, i) => supabase.from('schedule_entries').update({ [field]: i }).eq('id', entry.id))
     )
-    load()
+    load(false)
   }
 
   return {
