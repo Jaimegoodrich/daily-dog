@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { DndContext, MouseSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Card } from '@/components/ui/Card'
@@ -156,9 +156,14 @@ function OrderedList({
   onRemove: (id: string) => void
   onSetDefault: (id: string) => void
 }) {
-  // A small activation distance keeps an ordinary tap from being mistaken
-  // for a drag, on both mouse and touch.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  // Separate sensors per dnd-kit's own guidance: a distance-based constraint
+  // (mouse) doesn't translate well to touch, where the browser needs a
+  // clearer "this is a drag, not a scroll" signal — a short long-press delay
+  // instead.
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+  )
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
