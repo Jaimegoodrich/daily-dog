@@ -211,13 +211,13 @@ function SortableRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`flex items-center justify-between py-2 ${isDragging ? 'relative z-10 shadow-lg' : ''}`}
     >
-      <p className="flex items-center gap-2 font-semibold text-ocean-900">
-        <span
-          {...attributes}
-          {...listeners}
-          className="-m-2 flex h-11 w-11 cursor-grab select-none items-center justify-center text-xl text-ocean-700/40 active:cursor-grabbing"
-          style={{ touchAction: 'none' }}
-        >
+      <p
+        {...attributes}
+        {...listeners}
+        className="flex flex-1 cursor-grab items-center gap-2 self-stretch py-2 font-semibold text-ocean-900 active:cursor-grabbing"
+        style={{ touchAction: 'none' }}
+      >
+        <span className="text-xl text-ocean-700/40" aria-hidden>
           ⠿
         </span>
         {index + 1}. {entry.dog.name}
