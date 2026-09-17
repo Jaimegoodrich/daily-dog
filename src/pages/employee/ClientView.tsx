@@ -68,10 +68,10 @@ export function EmployeeClientView() {
   return (
     <div className="mx-auto max-w-2xl">
       <button
-        onClick={() => navigate('/clients')}
+        onClick={() => navigate('/dogs')}
         className="mb-4 text-sm font-semibold text-ocean-600 hover:underline"
       >
-        ← Back to clients
+        ← Back to dogs
       </button>
 
       <h1 className="mb-6 font-display text-2xl font-extrabold text-ocean-900">{client.main_name}</h1>

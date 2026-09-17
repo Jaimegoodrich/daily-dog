@@ -9,7 +9,7 @@ import { EmployeeDashboard } from '@/pages/employee/Dashboard'
 import { EmployeeSchedule } from '@/pages/employee/Schedule'
 import { RouteRun } from '@/pages/employee/RouteRun'
 import { EndOfShift } from '@/pages/employee/EndOfShift'
-import { EmployeeClientList } from '@/pages/employee/ClientList'
+import { EmployeeDogList } from '@/pages/employee/DogList'
 import { EmployeeClientView } from '@/pages/employee/ClientView'
 import { AdminDashboard } from '@/pages/admin/Dashboard'
 import { AdminCalendar } from '@/pages/admin/Calendar'
@@ -64,7 +64,7 @@ function AppRoutes() {
   const navItems = [
     { to: '/today', label: 'Today' },
     { to: '/schedule', label: 'Schedule' },
-    { to: '/clients', label: 'Clients' },
+    { to: '/dogs', label: 'Dogs' },
     { to: '/gallery', label: 'Gallery' },
   ]
   return (
@@ -72,8 +72,8 @@ function AppRoutes() {
       <Routes>
         <Route path="/today" element={<EmployeeDashboard />} />
         <Route path="/schedule" element={<EmployeeSchedule />} />
-        <Route path="/clients" element={<EmployeeClientList />} />
-        <Route path="/clients/:clientId" element={<EmployeeClientView />} />
+        <Route path="/dogs" element={<EmployeeDogList />} />
+        <Route path="/dogs/:clientId" element={<EmployeeClientView />} />
         <Route path="/route/:routeId" element={<RouteRun />} />
         <Route path="/end-of-shift/:routeId" element={<EndOfShift />} />
         <Route path="/gallery" element={<Gallery />} />

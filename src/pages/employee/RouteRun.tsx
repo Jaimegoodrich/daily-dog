@@ -153,8 +153,8 @@ function DogInfo({ dog }: { dog: Dog & { client: Client } }) {
       </p>
       <p className="text-sm text-ocean-700/70">{dog.client.main_name}</p>
       {dog.client.address && <p className="text-sm text-ocean-700/70">{dog.client.address}</p>}
-      <Link to={`/clients/${dog.client.id}`} className="text-sm font-semibold text-ocean-600 hover:underline">
-        View client info →
+      <Link to={`/dogs/${dog.client.id}`} className="text-sm font-semibold text-ocean-600 hover:underline">
+        View dog info →
       </Link>
     </div>
   )
