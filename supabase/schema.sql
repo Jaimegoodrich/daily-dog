@@ -143,6 +143,8 @@ create table dog_weekly_pattern (
   dog_id uuid not null references dogs (id) on delete cascade,
   day_of_week int not null check (day_of_week between 0 and 6),
   default_route_number int check (default_route_number between 1 and 3),
+  default_pickup_order int,
+  default_dropoff_order int,
   created_at timestamptz not null default now(),
   unique (dog_id, day_of_week)
 );
@@ -345,11 +347,72 @@ $$;
 
 grant execute on function set_default_route(uuid, int, int) to authenticated;
 
+-- Saves the current order of an entire route's pickup list as the default
+-- for every future occurrence of this weekday. Takes the dog ids in their
+-- new display order and assigns them 0, 1, 2... as the default position,
+-- alongside the route number they're on.
+create function set_default_pickup_order(p_dog_ids uuid[], p_day_of_week int, p_route_number int)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_dog_id uuid;
+  v_order int := 0;
+begin
+  if not is_admin() then
+    raise exception 'Only admin can set default routes';
+  end if;
+
+  foreach v_dog_id in array p_dog_ids loop
+    insert into dog_weekly_pattern (dog_id, day_of_week, default_route_number, default_pickup_order)
+    values (v_dog_id, p_day_of_week, p_route_number, v_order)
+    on conflict (dog_id, day_of_week)
+    do update set default_route_number = excluded.default_route_number,
+                  default_pickup_order = excluded.default_pickup_order;
+    v_order := v_order + 1;
+  end loop;
+end;
+$$;
+
+grant execute on function set_default_pickup_order(uuid[], int, int) to authenticated;
+
+-- Same as set_default_pickup_order, for the dropoff list.
+create function set_default_dropoff_order(p_dog_ids uuid[], p_day_of_week int, p_route_number int)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_dog_id uuid;
+  v_order int := 0;
+begin
+  if not is_admin() then
+    raise exception 'Only admin can set default routes';
+  end if;
+
+  foreach v_dog_id in array p_dog_ids loop
+    insert into dog_weekly_pattern (dog_id, day_of_week, default_route_number, default_dropoff_order)
+    values (v_dog_id, p_day_of_week, p_route_number, v_order)
+    on conflict (dog_id, day_of_week)
+    do update set default_route_number = excluded.default_route_number,
+                  default_dropoff_order = excluded.default_dropoff_order;
+    v_order := v_order + 1;
+  end loop;
+end;
+$$;
+
+grant execute on function set_default_dropoff_order(uuid[], int, int) to authenticated;
+
 -- Fills in pickup_route_id/dropoff_route_id for any of the date's hike
 -- entries that are missing one, using each dog's default route number for
 -- that weekday, if a route with that number already exists for the date.
--- Safe to call repeatedly (only ever fills in nulls, never overrides a
--- manual assignment).
+-- Honors a stored default order (default_pickup_order/default_dropoff_order)
+-- when set, falling back to appending at the end otherwise. Safe to call
+-- repeatedly (only ever fills in nulls, never overrides a manual
+-- assignment).
 create function apply_default_routes_for_date(p_date date)
 returns void
 language plpgsql
@@ -367,7 +430,7 @@ begin
   end if;
 
   for v_entry in
-    select se.id, dwp.default_route_number
+    select se.id, dwp.default_route_number, dwp.default_pickup_order
     from schedule_entries se
     join dog_weekly_pattern dwp on dwp.dog_id = se.dog_id and dwp.day_of_week = v_dow
     where se.type = 'hike'
@@ -379,15 +442,19 @@ begin
   loop
     select id into v_route_id from routes where date = p_date and route_number = v_entry.default_route_number;
     if v_route_id is not null then
-      select coalesce(max(pickup_route_order) + 1, 0) into v_next_order
-      from schedule_entries where pickup_route_id = v_route_id;
+      if v_entry.default_pickup_order is not null then
+        v_next_order := v_entry.default_pickup_order;
+      else
+        select coalesce(max(pickup_route_order) + 1, 0) into v_next_order
+        from schedule_entries where pickup_route_id = v_route_id;
+      end if;
       update schedule_entries set pickup_route_id = v_route_id, pickup_route_order = v_next_order
       where id = v_entry.id;
     end if;
   end loop;
 
   for v_entry in
-    select se.id, dwp.default_route_number
+    select se.id, dwp.default_route_number, dwp.default_dropoff_order
     from schedule_entries se
     join dog_weekly_pattern dwp on dwp.dog_id = se.dog_id and dwp.day_of_week = v_dow
     where se.type = 'hike'
@@ -400,8 +467,12 @@ begin
   loop
     select id into v_route_id from routes where date = p_date and route_number = v_entry.default_route_number;
     if v_route_id is not null then
-      select coalesce(max(dropoff_route_order) + 1, 0) into v_next_order
-      from schedule_entries where dropoff_route_id = v_route_id;
+      if v_entry.default_dropoff_order is not null then
+        v_next_order := v_entry.default_dropoff_order;
+      else
+        select coalesce(max(dropoff_route_order) + 1, 0) into v_next_order
+        from schedule_entries where dropoff_route_id = v_route_id;
+      end if;
       update schedule_entries set dropoff_route_id = v_route_id, dropoff_route_order = v_next_order
       where id = v_entry.id;
     end if;

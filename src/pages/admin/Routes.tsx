@@ -2,20 +2,49 @@ import { useState } from 'react'
 import { DndContext, MouseSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Select, Input } from '@/components/ui/Field'
+import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
-import { useRoutesForDay, type EntryWithDog } from '@/hooks/useRoutesForDay'
+import { dayOfWeek, useRoutesForDay, type EntryWithDog } from '@/hooks/useRoutesForDay'
 import type { Route } from '@/types/database'
+
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
+type PendingOrderDefault = { field: 'pickup' | 'dropoff'; routeNumber: number; dogIds: string[] }
+
 export function AdminRoutes() {
   const [date, setDate] = useState(todayStr())
-  const { routes, entries, employees, loading, setRouteEmployee, setDefaultRoute, assignPickup, assignDropoff, reorder } =
-    useRoutesForDay(date)
+  const {
+    routes,
+    entries,
+    employees,
+    loading,
+    setRouteEmployee,
+    setDefaultRoute,
+    setDefaultOrder,
+    assignPickup,
+    assignDropoff,
+    reorder,
+  } = useRoutesForDay(date)
+  const [pendingOrderDefault, setPendingOrderDefault] = useState<PendingOrderDefault | null>(null)
+
+  async function handleReorder(
+    list: EntryWithDog[],
+    field: 'pickup_route_order' | 'dropoff_route_order',
+    routeNumber: number,
+    fromIndex: number,
+    toIndex: number
+  ) {
+    const dogIds = await reorder(list, field, fromIndex, toIndex)
+    if (fromIndex === toIndex) return
+    setPendingOrderDefault({ field: field === 'pickup_route_order' ? 'pickup' : 'dropoff', routeNumber, dogIds })
+  }
 
   if (loading) {
     return (
@@ -97,14 +126,16 @@ export function AdminRoutes() {
               <OrderedList
                 title="Pickups"
                 list={pickupList}
-                onReorder={(from, to) => reorder(pickupList, 'pickup_route_order', from, to)}
+                onReorder={(from, to) => handleReorder(pickupList, 'pickup_route_order', route.route_number, from, to)}
                 onRemove={(id) => assignPickup(id, '')}
                 onSetDefault={(id) => setDefaultRoute(id, route.id)}
               />
               <OrderedList
                 title="Dropoffs"
                 list={dropoffList}
-                onReorder={(from, to) => reorder(dropoffList, 'dropoff_route_order', from, to)}
+                onReorder={(from, to) =>
+                  handleReorder(dropoffList, 'dropoff_route_order', route.route_number, from, to)
+                }
                 onRemove={(id) => assignDropoff(id, '')}
                 onSetDefault={(id) => setDefaultRoute(id, route.id)}
               />
@@ -112,6 +143,35 @@ export function AdminRoutes() {
           </div>
         )
       })}
+
+      <Modal
+        open={!!pendingOrderDefault}
+        onClose={() => setPendingOrderDefault(null)}
+        title="Save this order?"
+      >
+        {pendingOrderDefault && (
+          <div className="flex flex-col gap-4">
+            <p className="text-ocean-700/80">
+              Today's order is already updated. Should this also become the default order for every{' '}
+              {WEEKDAY_NAMES[dayOfWeek(date)]}?
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="ghost" onClick={() => setPendingOrderDefault(null)} fullWidth>
+                Just today
+              </Button>
+              <Button
+                onClick={() => {
+                  setDefaultOrder(pendingOrderDefault.field, pendingOrderDefault.routeNumber, pendingOrderDefault.dogIds)
+                  setPendingOrderDefault(null)
+                }}
+                fullWidth
+              >
+                Set as {WEEKDAY_NAMES[dayOfWeek(date)]} default
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

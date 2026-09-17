@@ -102,7 +102,7 @@ export function useRoutesForDay(date: string) {
     fromIndex: number,
     toIndex: number
   ) {
-    if (fromIndex === toIndex) return
+    if (fromIndex === toIndex) return list.map((e) => e.dog_id)
     const reordered = [...list]
     const [moved] = reordered.splice(fromIndex, 1)
     reordered.splice(toIndex, 0, moved)
@@ -110,6 +110,20 @@ export function useRoutesForDay(date: string) {
       reordered.map((entry, i) => supabase.from('schedule_entries').update({ [field]: i }).eq('id', entry.id))
     )
     load(false)
+    return reordered.map((e) => e.dog_id)
+  }
+
+  // Persists the current order of a route's pickup or dropoff list as the
+  // default for every future occurrence of this weekday, alongside the route
+  // itself — a separate, explicit action from reorder() so a one-off
+  // rearrangement doesn't silently change what auto-fills next week.
+  async function setDefaultOrder(field: 'pickup' | 'dropoff', routeNumber: number, dogIdsInOrder: string[]) {
+    const fn = field === 'pickup' ? 'set_default_pickup_order' : 'set_default_dropoff_order'
+    await supabase.rpc(fn, {
+      p_dog_ids: dogIdsInOrder,
+      p_day_of_week: dayOfWeek(date),
+      p_route_number: routeNumber,
+    })
   }
 
   return {
@@ -120,6 +134,7 @@ export function useRoutesForDay(date: string) {
     load,
     setRouteEmployee,
     setDefaultRoute,
+    setDefaultOrder,
     assignPickup,
     assignDropoff,
     reorder,
