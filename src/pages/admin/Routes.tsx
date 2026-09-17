@@ -214,8 +214,9 @@ function SortableRow({
       <p
         {...attributes}
         {...listeners}
-        className="flex flex-1 cursor-grab items-center gap-2 self-stretch py-2 font-semibold text-ocean-900 active:cursor-grabbing"
-        style={{ touchAction: 'none' }}
+        onContextMenu={(e) => e.preventDefault()}
+        className="flex flex-1 cursor-grab select-none items-center gap-2 self-stretch py-2 font-semibold text-ocean-900 active:cursor-grabbing"
+        style={{ touchAction: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
       >
         <span className="text-xl text-ocean-700/40" aria-hidden>
           ⠿
