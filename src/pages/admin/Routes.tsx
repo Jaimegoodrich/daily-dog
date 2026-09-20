@@ -127,6 +127,9 @@ export function AdminRoutes() {
                 title="Pickups"
                 list={pickupList}
                 onReorder={(from, to) => handleReorder(pickupList, 'pickup_route_order', route.route_number, from, to)}
+                routes={routes}
+                currentRouteId={route.id}
+                onMove={(id, routeId) => assignPickup(id, routeId)}
                 onRemove={(id) => assignPickup(id, '')}
                 onSetDefault={(id) => setDefaultRoute(id, route.id)}
               />
@@ -136,6 +139,9 @@ export function AdminRoutes() {
                 onReorder={(from, to) =>
                   handleReorder(dropoffList, 'dropoff_route_order', route.route_number, from, to)
                 }
+                routes={routes}
+                currentRouteId={route.id}
+                onMove={(id, routeId) => assignDropoff(id, routeId)}
                 onRemove={(id) => assignDropoff(id, '')}
                 onSetDefault={(id) => setDefaultRoute(id, route.id)}
               />
@@ -206,13 +212,19 @@ function UnassignedRow({
 function OrderedList({
   title,
   list,
+  routes,
+  currentRouteId,
   onReorder,
+  onMove,
   onRemove,
   onSetDefault,
 }: {
   title: string
   list: EntryWithDog[]
+  routes: Route[]
+  currentRouteId: string
   onReorder: (fromIndex: number, toIndex: number) => void
+  onMove: (id: string, routeId: string) => void
   onRemove: (id: string) => void
   onSetDefault: (id: string) => void
 }) {
@@ -245,6 +257,8 @@ function OrderedList({
                 key={entry.id}
                 entry={entry}
                 index={i}
+                otherRoutes={routes.filter((r) => r.id !== currentRouteId)}
+                onMove={onMove}
                 onRemove={onRemove}
                 onSetDefault={onSetDefault}
               />
@@ -260,11 +274,15 @@ function OrderedList({
 function SortableRow({
   entry,
   index,
+  otherRoutes,
+  onMove,
   onRemove,
   onSetDefault,
 }: {
   entry: EntryWithDog
   index: number
+  otherRoutes: Route[]
+  onMove: (id: string, routeId: string) => void
   onRemove: (id: string) => void
   onSetDefault: (id: string) => void
 }) {
@@ -289,6 +307,21 @@ function SortableRow({
         {index + 1}. {entry.dog.name}
       </p>
       <div className="flex items-center gap-3 text-sm">
+        {otherRoutes.length > 0 && (
+          <Select
+            value=""
+            onChange={(e) => e.target.value && onMove(entry.id, e.target.value)}
+            aria-label={`Move ${entry.dog.name} to another route`}
+            className="w-28! px-2! py-1! text-sm"
+          >
+            <option value="">Move to...</option>
+            {otherRoutes.map((r) => (
+              <option key={r.id} value={r.id}>
+                Route {r.route_number}
+              </option>
+            ))}
+          </Select>
+        )}
         <button
           onClick={() => onSetDefault(entry.id)}
           title="Make this route the default for this dog on this weekday"
