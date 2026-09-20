@@ -129,7 +129,7 @@ create table schedule_entries (
   pickup_issue_notes text,
   dropoff_issue_notes text,
   cancelled boolean not null default false,
-  cancel_reason text check (cancel_reason in ('vet', 'grooming', 'vacation', 'injury', 'other')),
+  cancel_reason text check (cancel_reason in ('vet', 'grooming', 'vacation', 'injury', 'rain', 'heat', 'admin', 'other')),
   late_cancel boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

@@ -10,7 +10,7 @@ export type ScheduleType = 'hike' | 'boarding'
 export type RouteStatus = 'pending' | 'in_progress' | 'completed'
 export type PickupStatus = 'pending' | 'picked_up'
 export type DropoffStatus = 'pending' | 'dropped_off'
-export type CancelReason = 'vet' | 'grooming' | 'vacation' | 'injury' | 'other'
+export type CancelReason = 'vet' | 'grooming' | 'vacation' | 'injury' | 'rain' | 'heat' | 'admin' | 'other'
 
 export interface Profile {
   id: string

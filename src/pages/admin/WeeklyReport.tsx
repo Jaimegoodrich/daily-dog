@@ -43,6 +43,9 @@ const REASON_LABELS: Record<string, string> = {
   grooming: 'Grooming',
   vacation: 'Vacation',
   injury: 'Injury',
+  rain: 'Rain',
+  heat: 'Heat',
+  admin: 'Admin',
   other: 'Other',
 }
 

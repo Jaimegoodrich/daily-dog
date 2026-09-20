@@ -10,6 +10,9 @@ const CANCEL_REASONS: { value: CancelReason; label: string }[] = [
   { value: 'grooming', label: 'Grooming' },
   { value: 'vacation', label: 'Vacation' },
   { value: 'injury', label: 'Injury' },
+  { value: 'rain', label: 'Rain' },
+  { value: 'heat', label: 'Heat' },
+  { value: 'admin', label: 'Admin' },
   { value: 'other', label: 'Other' },
 ]
 
