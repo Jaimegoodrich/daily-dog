@@ -13,7 +13,8 @@ type PhotoWithTags = Photo & { dogs: Dog[]; url: string | null }
 export function Gallery({ isAdmin = false }: { isAdmin?: boolean }) {
   const { employee } = useAuth()
   const [photos, setPhotos] = useState<PhotoWithTags[] | null>(null)
-  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [dogs, setDogs] = useState<Dog[] | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -48,9 +49,11 @@ export function Gallery({ isAdmin = false }: { isAdmin?: boolean }) {
   }, [])
 
   function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPendingFile(file)
+    const files = Array.from(e.target.files ?? [])
+    // Reset so picking the same photo(s) again still fires onChange.
+    e.target.value = ''
+    if (files.length === 0) return
+    setPendingFiles(files)
     if (!dogs) {
       supabase
         .from('dogs')
@@ -60,30 +63,42 @@ export function Gallery({ isAdmin = false }: { isAdmin?: boolean }) {
     }
   }
 
+  // Uploads every picked photo one at a time, tagging each with the same dogs.
   async function handleUpload(dogIds: string[]) {
-    if (!pendingFile || dogIds.length === 0) return
-    // Photos picked from the library can have spaces or other characters in
-    // their names that storage keys don't allow.
-    const safeName = pendingFile.name.replace(/[^A-Za-z0-9._-]/g, '_')
-    const path = `gallery/${Date.now()}-${safeName}`
-    const { error: uploadError } = await supabase.storage.from('media').upload(path, pendingFile)
-    if (uploadError) {
-      alert(uploadError.message)
-      return
+    if (pendingFiles.length === 0 || dogIds.length === 0 || progress) return
+    const files = pendingFiles
+    const failures: string[] = []
+    setProgress({ done: 0, total: files.length })
+
+    for (const [i, file] of files.entries()) {
+      // Photos picked from the library can have spaces or other characters in
+      // their names that storage keys don't allow.
+      const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
+      const path = `gallery/${Date.now()}-${i}-${safeName}`
+      const { error: uploadError } = await supabase.storage.from('media').upload(path, file)
+      if (uploadError) {
+        failures.push(`${file.name}: ${uploadError.message}`)
+      } else {
+        const { data: photo, error: photoError } = await supabase
+          .from('photos')
+          .insert({ uploaded_by: employee?.id ?? null, storage_path: path })
+          .select('id')
+          .single()
+        if (photoError || !photo) {
+          failures.push(`${file.name}: ${photoError?.message ?? 'Could not save photo'}`)
+        } else {
+          await supabase.from('photo_tags').insert(dogIds.map((dog_id) => ({ photo_id: photo.id, dog_id })))
+        }
+      }
+      setProgress({ done: i + 1, total: files.length })
     }
-    const { data: photo, error: photoError } = await supabase
-      .from('photos')
-      .insert({ uploaded_by: employee?.id ?? null, storage_path: path })
-      .select('id')
-      .single()
-    if (photoError || !photo) {
-      alert(photoError?.message ?? 'Could not save photo')
-      return
-    }
-    await supabase.from('photo_tags').insert(dogIds.map((dog_id) => ({ photo_id: photo.id, dog_id })))
-    setPendingFile(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
+
+    setProgress(null)
+    setPendingFiles([])
     await loadPhotos()
+    if (failures.length > 0) {
+      alert(`${failures.length} of ${files.length} photos didn't upload:\n\n${failures.join('\n')}`)
+    }
   }
 
   async function handleDelete(photo: PhotoWithTags) {
@@ -102,6 +117,7 @@ export function Gallery({ isAdmin = false }: { isAdmin?: boolean }) {
           ref={fileInputRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
           onChange={handlePick}
         />
@@ -149,14 +165,28 @@ export function Gallery({ isAdmin = false }: { isAdmin?: boolean }) {
         ))}
       </div>
 
-      <Modal open={!!pendingFile} onClose={() => setPendingFile(null)} title="Tag the dogs in this photo">
-        <DogPicker dogs={dogs} onConfirm={handleUpload} />
+      <Modal
+        open={pendingFiles.length > 0}
+        onClose={() => !progress && setPendingFiles([])}
+        title={pendingFiles.length > 1 ? `Tag the dogs in these ${pendingFiles.length} photos` : 'Tag the dogs in this photo'}
+      >
+        <DogPicker dogs={dogs} photoCount={pendingFiles.length} progress={progress} onConfirm={handleUpload} />
       </Modal>
     </div>
   )
 }
 
-function DogPicker({ dogs, onConfirm }: { dogs: Dog[] | null; onConfirm: (dogIds: string[]) => void }) {
+function DogPicker({
+  dogs,
+  photoCount,
+  progress,
+  onConfirm,
+}: {
+  dogs: Dog[] | null
+  photoCount: number
+  progress: { done: number; total: number } | null
+  onConfirm: (dogIds: string[]) => void
+}) {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -199,8 +229,13 @@ function DogPicker({ dogs, onConfirm }: { dogs: Dog[] | null; onConfirm: (dogIds
         ))}
         {filtered.length === 0 && <p className="py-4 text-center text-ocean-700/50">No dogs found.</p>}
       </div>
-      <Button fullWidth disabled={selected.size === 0} onClick={() => onConfirm([...selected])}>
-        Tag {selected.size > 0 ? `${selected.size} Dog${selected.size === 1 ? '' : 's'}` : 'Dogs'} & Upload
+      {photoCount > 1 && (
+        <p className="mb-3 text-sm text-ocean-700/70">The dogs you pick are tagged on all {photoCount} photos.</p>
+      )}
+      <Button fullWidth disabled={selected.size === 0 || !!progress} onClick={() => onConfirm([...selected])}>
+        {progress
+          ? `Uploading ${Math.min(progress.done + 1, progress.total)} of ${progress.total}...`
+          : `Tag ${selected.size > 0 ? `${selected.size} Dog${selected.size === 1 ? '' : 's'}` : 'Dogs'} & Upload${photoCount > 1 ? ` ${photoCount} Photos` : ''}`}
       </Button>
     </div>
   )
