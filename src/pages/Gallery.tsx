@@ -62,7 +62,10 @@ export function Gallery({ isAdmin = false }: { isAdmin?: boolean }) {
 
   async function handleUpload(dogIds: string[]) {
     if (!pendingFile || dogIds.length === 0) return
-    const path = `gallery/${Date.now()}-${pendingFile.name}`
+    // Photos picked from the library can have spaces or other characters in
+    // their names that storage keys don't allow.
+    const safeName = pendingFile.name.replace(/[^A-Za-z0-9._-]/g, '_')
+    const path = `gallery/${Date.now()}-${safeName}`
     const { error: uploadError } = await supabase.storage.from('media').upload(path, pendingFile)
     if (uploadError) {
       alert(uploadError.message)
@@ -99,7 +102,6 @@ export function Gallery({ isAdmin = false }: { isAdmin?: boolean }) {
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="hidden"
           onChange={handlePick}
         />
