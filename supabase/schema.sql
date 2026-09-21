@@ -160,6 +160,13 @@ create table daily_reports (
   submitted_at timestamptz not null default now()
 );
 
+-- Good-morning note from the admin to the team, one per date.
+create table admin_notes (
+  date date primary key,
+  note text not null,
+  updated_at timestamptz not null default now()
+);
+
 create table photos (
   id uuid primary key default gen_random_uuid(),
   uploaded_by uuid references employees (id) on delete set null,
@@ -496,6 +503,7 @@ alter table routes enable row level security;
 alter table schedule_entries enable row level security;
 alter table dog_weekly_pattern enable row level security;
 alter table daily_reports enable row level security;
+alter table admin_notes enable row level security;
 alter table photos enable row level security;
 alter table photo_tags enable row level security;
 
@@ -570,6 +578,13 @@ create policy "daily_reports_select" on daily_reports for select
   using (employee_id = current_employee_id() or is_admin());
 create policy "daily_reports_insert_own" on daily_reports for insert
   with check (employee_id = current_employee_id());
+
+-- admin_notes: any signed-in staff can read, only admin can write.
+create policy "admin_notes_select_authenticated" on admin_notes for select
+  using (auth.role() = 'authenticated');
+create policy "admin_notes_admin_insert" on admin_notes for insert with check (is_admin());
+create policy "admin_notes_admin_update" on admin_notes for update using (is_admin()) with check (is_admin());
+create policy "admin_notes_admin_delete" on admin_notes for delete using (is_admin());
 
 -- photos
 create policy "photos_select_authenticated" on photos for select

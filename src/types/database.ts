@@ -150,6 +150,12 @@ export interface Photo {
   created_at: string
 }
 
+export interface AdminNote {
+  date: string
+  note: string
+  updated_at: string
+}
+
 export interface PhotoTag {
   id: string
   photo_id: string

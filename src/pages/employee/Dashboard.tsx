@@ -18,6 +18,7 @@ export function EmployeeDashboard() {
   const { employee } = useAuth()
   const navigate = useNavigate()
   const [routes, setRoutes] = useState<Route[] | null>(null)
+  const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
     if (!employee) return
@@ -29,6 +30,12 @@ export function EmployeeDashboard() {
       .eq('employee_id', employee.id)
       .order('route_number')
       .then(({ data }) => setRoutes(data ?? []))
+    supabase
+      .from('admin_notes')
+      .select('note')
+      .eq('date', today)
+      .maybeSingle()
+      .then(({ data }) => setNote(data?.note ?? null))
   }, [employee])
 
   return (
@@ -37,6 +44,13 @@ export function EmployeeDashboard() {
         {greeting()}, {employee?.display_name}!
       </h1>
       <p className="mb-6 text-ocean-700/70">Here's your day 🌊</p>
+
+      {note && (
+        <Card className="mb-6 border-sun-200 bg-sun-50">
+          <h2 className="mb-2 font-display text-lg font-bold text-ocean-900">📝 Good Morning Note</h2>
+          <p className="whitespace-pre-wrap text-ocean-800">{note}</p>
+        </Card>
+      )}
 
       {routes === null && (
         <div className="flex justify-center py-10">

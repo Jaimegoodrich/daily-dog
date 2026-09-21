@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
+import { MorningNoteEditor } from '@/components/MorningNoteEditor'
 import type { Employee, Route } from '@/types/database'
 
 type RouteWithEmployee = Route & { employee: Employee | null }
@@ -65,6 +66,8 @@ export function AdminDashboard() {
   return (
     <div>
       <h1 className="mb-6 font-display text-2xl font-extrabold text-ocean-900">🏝️ Admin Dashboard</h1>
+
+      <MorningNoteEditor />
 
       {birthdays.length > 0 && (
         <Card className="mb-6 bg-sun-50">
