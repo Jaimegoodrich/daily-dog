@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { downloadCSV, downloadText } from '@/lib/csv'
+import { computePayroll, formatClockTime, formatDecimalHours, formatDuration } from '@/lib/payroll'
 import type { DailyReport, Dog, Employee, Route, ScheduleEntry } from '@/types/database'
 
 const WEEKDAY_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -142,6 +143,16 @@ export function WeeklyReport() {
   for (const e of entries) dogNames.set(e.dog_id, e.dog.name)
   const dogIds = [...dogNames.keys()].sort((a, b) => dogNames.get(a)!.localeCompare(dogNames.get(b)!))
 
+  const payroll = computePayroll(
+    entries,
+    routes.map((r) => ({
+      id: r.id,
+      date: r.date,
+      employee_id: r.employee_id,
+      employeeName: r.employee?.display_name ?? null,
+    }))
+  )
+
   function handleExport() {
     const allEntries = entries ?? []
     const rows: unknown[][] = [
@@ -190,6 +201,20 @@ export function WeeklyReport() {
           if (entry.cancelled) return `Cancelled: ${REASON_LABELS[entry.cancel_reason ?? 'other']}`
           return 'Scheduled'
         }),
+      ]),
+      [],
+      ['PAYROLL'],
+      ['Employee', 'Date', 'First Pickup', 'Last Pickup', 'Hours (h:mm)', 'Hours (decimal)'],
+      ...payroll.flatMap((emp) => [
+        ...emp.days.map((d) => [
+          emp.name,
+          d.date,
+          formatClockTime(d.firstPickup),
+          formatClockTime(d.lastPickup),
+          formatDuration(d.minutes),
+          formatDecimalHours(d.minutes),
+        ]),
+        [emp.name, 'WEEK TOTAL', '', '', formatDuration(emp.totalMinutes), formatDecimalHours(emp.totalMinutes)],
       ]),
     ]
     downloadCSV(`weekly-report-${weekStart}.csv`, rows)
@@ -254,6 +279,19 @@ export function WeeklyReport() {
       )
     }
 
+    lines.push('')
+    lines.push('PAYROLL (first to last pickup, rounded up to 15 min)')
+    if (payroll.length === 0) lines.push('  No pickups logged')
+    for (const emp of payroll) {
+      lines.push(`  ${emp.name}`)
+      for (const d of emp.days) {
+        lines.push(
+          `    ${formatDate(d.date)}: ${formatClockTime(d.firstPickup)} – ${formatClockTime(d.lastPickup)} = ${formatDuration(d.minutes)} (${formatDecimalHours(d.minutes)} hrs)`
+        )
+      }
+      lines.push(`    Week total: ${formatDuration(emp.totalMinutes)} (${formatDecimalHours(emp.totalMinutes)} hrs)`)
+    }
+
     downloadText(`weekly-report-${weekStart}.txt`, lines.join('\n'))
   }
 
@@ -277,7 +315,7 @@ export function WeeklyReport() {
           </Button>
         </div>
       </div>
-      <p className="mb-6 text-ocean-700/70">Cancellations, adds, issues, and route rosters for the week.</p>
+      <p className="mb-6 text-ocean-700/70">Cancellations, adds, issues, route rosters, and payroll hours for the week.</p>
 
       <div className="mb-6 flex items-center justify-center gap-4">
         <button onClick={prevWeek} className="text-2xl text-ocean-600">
@@ -400,6 +438,58 @@ export function WeeklyReport() {
         <p className="mt-3 text-xs text-ocean-700/50">
           Example: Rex — ✓ Mon, ✓ Tue, ✓ Wed, Vet Thu (cancelled), ✓ Fri.
         </p>
+      </Section>
+
+      <Section title="💵 Payroll">
+        <p className="mb-3 text-sm text-ocean-700/70">
+          Each day is the time from the employee's first to last logged pickup, rounded up to the next 15 minutes.
+          The week is the total of those days.
+        </p>
+        {payroll.length === 0 && <Empty text="No pickups logged this week." />}
+        {payroll.map((emp) => (
+          <div key={emp.employeeId} className="mb-5 last:mb-0">
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <p className="font-display font-bold text-ocean-900">{emp.name}</p>
+              <p className="font-display font-bold text-ocean-600">
+                {formatDecimalHours(emp.totalMinutes)} hrs
+                <span className="ml-2 text-sm font-semibold text-ocean-700/60">
+                  ({formatDuration(emp.totalMinutes)})
+                </span>
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[420px] border-collapse text-sm">
+                <thead>
+                  <tr className="text-left text-ocean-700/60">
+                    <th className="pb-1 font-semibold">Date</th>
+                    <th className="pb-1 font-semibold">First pickup</th>
+                    <th className="pb-1 font-semibold">Last pickup</th>
+                    <th className="pb-1 text-right font-semibold">Time</th>
+                    <th className="pb-1 text-right font-semibold">Hours</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emp.days.map((d) => (
+                    <tr key={d.date} className="border-t border-sand-200 text-ocean-800">
+                      <td className="py-1.5 font-semibold text-ocean-900">{formatDate(d.date)}</td>
+                      <td className="py-1.5">{formatClockTime(d.firstPickup)}</td>
+                      <td className="py-1.5">
+                        {formatClockTime(d.lastPickup)}
+                        {d.pickupCount === 1 && (
+                          <span className="ml-1 text-xs text-sun-700" title="Only one pickup was logged this day">
+                            (1 pickup)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right">{formatDuration(d.minutes)}</td>
+                      <td className="py-1.5 text-right font-semibold">{formatDecimalHours(d.minutes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </Section>
     </div>
   )
