@@ -204,15 +204,15 @@ export function WeeklyReport() {
       ]),
       [],
       ['PAYROLL'],
-      ['Employee', 'Date', 'First Pickup', 'Last Pickup', 'Hours (h:mm)', 'Hours (decimal)'],
+      ['Employee', 'Date', 'First Pickup', 'Last Dropoff', 'Hours (h:mm)', 'Hours (decimal)'],
       ...payroll.flatMap((emp) => [
         ...emp.days.map((d) => [
           emp.name,
           d.date,
           formatClockTime(d.firstPickup),
-          formatClockTime(d.lastPickup),
-          formatDuration(d.minutes),
-          formatDecimalHours(d.minutes),
+          formatClockTime(d.lastDropoff),
+          d.firstPickup && d.lastDropoff ? formatDuration(d.minutes) : 'INCOMPLETE',
+          d.firstPickup && d.lastDropoff ? formatDecimalHours(d.minutes) : '',
         ]),
         [emp.name, 'WEEK TOTAL', '', '', formatDuration(emp.totalMinutes), formatDecimalHours(emp.totalMinutes)],
       ]),
@@ -280,13 +280,15 @@ export function WeeklyReport() {
     }
 
     lines.push('')
-    lines.push('PAYROLL (first to last pickup, rounded up to 15 min)')
+    lines.push('PAYROLL (first pickup to last dropoff, rounded up to 15 min)')
     if (payroll.length === 0) lines.push('  No pickups logged')
     for (const emp of payroll) {
       lines.push(`  ${emp.name}`)
       for (const d of emp.days) {
         lines.push(
-          `    ${formatDate(d.date)}: ${formatClockTime(d.firstPickup)} – ${formatClockTime(d.lastPickup)} = ${formatDuration(d.minutes)} (${formatDecimalHours(d.minutes)} hrs)`
+          d.firstPickup && d.lastDropoff
+            ? `    ${formatDate(d.date)}: ${formatClockTime(d.firstPickup)} – ${formatClockTime(d.lastDropoff)} = ${formatDuration(d.minutes)} (${formatDecimalHours(d.minutes)} hrs)`
+            : `    ${formatDate(d.date)}: ${formatClockTime(d.firstPickup)} – ${formatClockTime(d.lastDropoff)} INCOMPLETE (${d.firstPickup ? 'no dropoff logged' : 'no pickup logged'})`
         )
       }
       lines.push(`    Week total: ${formatDuration(emp.totalMinutes)} (${formatDecimalHours(emp.totalMinutes)} hrs)`)
@@ -442,10 +444,10 @@ export function WeeklyReport() {
 
       <Section title="💵 Payroll">
         <p className="mb-3 text-sm text-ocean-700/70">
-          Each day is the time from the employee's first to last logged pickup, rounded up to the next 15 minutes.
+          Each day is the time from the employee's first pickup to their last dropoff, rounded up to the next 15 minutes.
           The week is the total of those days.
         </p>
-        {payroll.length === 0 && <Empty text="No pickups logged this week." />}
+        {payroll.length === 0 && <Empty text="No pickups or dropoffs logged this week." />}
         {payroll.map((emp) => (
           <div key={emp.employeeId} className="mb-5 last:mb-0">
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -463,7 +465,7 @@ export function WeeklyReport() {
                   <tr className="text-left text-ocean-700/60">
                     <th className="pb-1 font-semibold">Date</th>
                     <th className="pb-1 font-semibold">First pickup</th>
-                    <th className="pb-1 font-semibold">Last pickup</th>
+                    <th className="pb-1 font-semibold">Last dropoff</th>
                     <th className="pb-1 text-right font-semibold">Time</th>
                     <th className="pb-1 text-right font-semibold">Hours</th>
                   </tr>
@@ -473,16 +475,17 @@ export function WeeklyReport() {
                     <tr key={d.date} className="border-t border-sand-200 text-ocean-800">
                       <td className="py-1.5 font-semibold text-ocean-900">{formatDate(d.date)}</td>
                       <td className="py-1.5">{formatClockTime(d.firstPickup)}</td>
-                      <td className="py-1.5">
-                        {formatClockTime(d.lastPickup)}
-                        {d.pickupCount === 1 && (
-                          <span className="ml-1 text-xs text-sun-700" title="Only one pickup was logged this day">
-                            (1 pickup)
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-1.5 text-right">{formatDuration(d.minutes)}</td>
-                      <td className="py-1.5 text-right font-semibold">{formatDecimalHours(d.minutes)}</td>
+                      <td className="py-1.5">{formatClockTime(d.lastDropoff)}</td>
+                      {d.firstPickup && d.lastDropoff ? (
+                        <>
+                          <td className="py-1.5 text-right">{formatDuration(d.minutes)}</td>
+                          <td className="py-1.5 text-right font-semibold">{formatDecimalHours(d.minutes)}</td>
+                        </>
+                      ) : (
+                        <td colSpan={2} className="py-1.5 text-right text-xs font-semibold text-sun-700">
+                          {d.firstPickup ? 'No dropoff logged' : 'No pickup logged'}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

@@ -1,12 +1,18 @@
-export type PayrollEntry = { pickup_route_id: string | null; actual_pickup_at: string | null }
+export type PayrollEntry = {
+  pickup_route_id: string | null
+  actual_pickup_at: string | null
+  dropoff_route_id: string | null
+  actual_dropoff_at: string | null
+}
 export type PayrollRoute = { id: string; date: string; employee_id: string | null; employeeName: string | null }
 
 export type PayrollDay = {
   date: string
-  firstPickup: Date
-  lastPickup: Date
-  pickupCount: number
-  /** Time between first and last pickup, rounded up to the next 15 minutes. */
+  /** First dog picked up that day, or null if none was logged. */
+  firstPickup: Date | null
+  /** Last dog dropped off that day, or null if none was logged. */
+  lastDropoff: Date | null
+  /** Time from first pickup to last dropoff, rounded up to the next 15 minutes. 0 if either end is missing. */
   minutes: number
 }
 
@@ -20,40 +26,49 @@ export type PayrollEmployee = {
 const INCREMENT_MINUTES = 15
 
 /**
- * For each employee and date: the time from their first to last logged
- * pickup, rounded up to the nearest 15 minutes. The week's total is the sum
- * of those daily figures. Seconds are ignored (times compare by the minute),
- * so 8:25:40 -> 2:45:10 counts as 6h 20m before rounding up to 6h 30m.
+ * For each employee and date: the time from the first dog they picked up to
+ * the last dog they dropped off, rounded up to the nearest 15 minutes. The
+ * week's total is the sum of those daily figures. A day missing either end
+ * (nothing logged yet) counts as 0 and is flagged so it can be chased up.
+ * Seconds are ignored (times compare by the minute), so 8:25:40 -> 2:45:10
+ * counts as 6h 20m before rounding up to 6h 30m.
  */
 export function computePayroll(entries: PayrollEntry[], routes: PayrollRoute[]): PayrollEmployee[] {
   const routeById = new Map(routes.map((r) => [r.id, r]))
-  // employeeId -> date -> pickup times
-  const byEmployee = new Map<string, { name: string; dates: Map<string, Date[]> }>()
+  // employeeId -> date -> logged pickup / dropoff times
+  const byEmployee = new Map<string, { name: string; dates: Map<string, { pickups: Date[]; dropoffs: Date[] }> }>()
 
-  for (const entry of entries) {
-    if (!entry.pickup_route_id || !entry.actual_pickup_at) continue
-    const route = routeById.get(entry.pickup_route_id)
-    if (!route?.employee_id) continue
-    const emp = byEmployee.get(route.employee_id) ?? {
-      name: route.employeeName ?? 'Unknown',
-      dates: new Map<string, Date[]>(),
-    }
-    const times = emp.dates.get(route.date) ?? []
-    times.push(new Date(entry.actual_pickup_at))
-    emp.dates.set(route.date, times)
+  function record(routeId: string | null, at: string | null, kind: 'pickups' | 'dropoffs') {
+    if (!routeId || !at) return
+    const route = routeById.get(routeId)
+    if (!route?.employee_id) return
+    const emp = byEmployee.get(route.employee_id) ?? { name: route.employeeName ?? 'Unknown', dates: new Map() }
+    const day = emp.dates.get(route.date) ?? { pickups: [], dropoffs: [] }
+    day[kind].push(new Date(at))
+    emp.dates.set(route.date, day)
     byEmployee.set(route.employee_id, emp)
   }
+
+  for (const entry of entries) {
+    record(entry.pickup_route_id, entry.actual_pickup_at, 'pickups')
+    record(entry.dropoff_route_id, entry.actual_dropoff_at, 'dropoffs')
+  }
+
+  const earliest = (times: Date[]) => (times.length ? new Date(Math.min(...times.map((t) => t.getTime()))) : null)
+  const latest = (times: Date[]) => (times.length ? new Date(Math.max(...times.map((t) => t.getTime()))) : null)
 
   return [...byEmployee.entries()]
     .map(([employeeId, { name, dates }]) => {
       const days: PayrollDay[] = [...dates.entries()]
-        .map(([date, times]) => {
-          const sorted = times.sort((a, b) => a.getTime() - b.getTime())
-          const firstPickup = sorted[0]
-          const lastPickup = sorted[sorted.length - 1]
-          const elapsed = Math.floor(lastPickup.getTime() / 60000) - Math.floor(firstPickup.getTime() / 60000)
-          const minutes = Math.ceil(elapsed / INCREMENT_MINUTES) * INCREMENT_MINUTES
-          return { date, firstPickup, lastPickup, pickupCount: sorted.length, minutes }
+        .map(([date, { pickups, dropoffs }]) => {
+          const firstPickup = earliest(pickups)
+          const lastDropoff = latest(dropoffs)
+          let minutes = 0
+          if (firstPickup && lastDropoff) {
+            const elapsed = Math.floor(lastDropoff.getTime() / 60000) - Math.floor(firstPickup.getTime() / 60000)
+            minutes = Math.max(0, Math.ceil(elapsed / INCREMENT_MINUTES) * INCREMENT_MINUTES)
+          }
+          return { date, firstPickup, lastDropoff, minutes }
         })
         .sort((a, b) => a.date.localeCompare(b.date))
       return { employeeId, name, days, totalMinutes: days.reduce((sum, d) => sum + d.minutes, 0) }
@@ -71,7 +86,7 @@ export function formatDecimalHours(minutes: number) {
   return (minutes / 60).toFixed(2)
 }
 
-/** "8:25 AM" in the viewer's local time. */
-export function formatClockTime(date: Date) {
-  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+/** "8:25 AM" in the viewer's local time, or "—" when nothing was logged. */
+export function formatClockTime(date: Date | null) {
+  return date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—'
 }
