@@ -48,12 +48,8 @@ export function RouteRun() {
     setError(null)
     const { error } = await supabase.rpc('clock_out', { p_route_id: routeId! })
     setClockingOut(false)
-    if (error) {
-      setError(error.message)
-      await load()
-      return
-    }
-    navigate(`/end-of-shift/${routeId}`)
+    if (error) setError(error.message)
+    await load()
   }
 
   if (!route || entries === null) {
@@ -117,7 +113,7 @@ export function RouteRun() {
         <Card className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <p className="text-ocean-800">Clock in to start your route.</p>
           <Button onClick={handleClockIn} disabled={starting}>
-            {starting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : '⏰ Clock In'}
+            {starting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : "☀️ Let's Start the Day!"}
           </Button>
         </Card>
       )}
@@ -150,14 +146,16 @@ export function RouteRun() {
                   : `${pendingDropoffs} drop-off${pendingDropoffs === 1 ? '' : 's'} left before you can clock out.`}
               </p>
               <Button disabled={!readyToClockOut || clockingOut} onClick={handleClockOut}>
-                {clockingOut ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : '⏰ Clock Out'}
+                {clockingOut ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Route finished! Clock out!'}
               </Button>
             </Card>
           )}
 
           {route.status === 'in_progress' && clockedOut && (
-            <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
-              <p className="text-ocean-800">You're clocked out. Last step: your end of shift report.</p>
+            <Card className="mt-6 flex flex-col items-center gap-3 bg-ocean-50 py-8 text-center">
+              <PawPrint className="h-14 w-14 text-ocean-500" />
+              <p className="font-display text-3xl font-extrabold text-ocean-900">You're Awesome!</p>
+              <p className="text-ocean-700/70">You're clocked out. Last step: your end of shift report.</p>
               <Button onClick={() => navigate(`/end-of-shift/${routeId}`)}>End of Shift Report</Button>
             </Card>
           )}
@@ -181,6 +179,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="mb-3 font-display text-lg font-bold text-ocean-800">{title}</h2>
       <div className="flex flex-col gap-3">{children}</div>
     </div>
+  )
+}
+
+function PawPrint({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" fill="currentColor" aria-hidden="true" className={className}>
+      <ellipse cx="14" cy="26" rx="6.5" ry="8.5" transform="rotate(-20 14 26)" />
+      <ellipse cx="25" cy="13" rx="6.5" ry="9" transform="rotate(-8 25 13)" />
+      <ellipse cx="39" cy="13" rx="6.5" ry="9" transform="rotate(8 39 13)" />
+      <ellipse cx="50" cy="26" rx="6.5" ry="8.5" transform="rotate(20 50 26)" />
+      <path d="M32 30c-8 0-17 12-17 20 0 6 5 9 10 8 3-.5 5-2 7-2s4 1.5 7 2c5 1 10-2 10-8 0-8-9-20-17-20z" />
+    </svg>
   )
 }
 
