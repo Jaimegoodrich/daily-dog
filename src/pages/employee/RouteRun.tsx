@@ -14,6 +14,8 @@ export function RouteRun() {
   const [route, setRoute] = useState<Route | null>(null)
   const [entries, setEntries] = useState<EntryWithDog[] | null>(null)
   const [starting, setStarting] = useState(false)
+  const [clockingOut, setClockingOut] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function load() {
     const [{ data: routeData }, { data: entryData }] = await Promise.all([
@@ -32,11 +34,26 @@ export function RouteRun() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeId])
 
-  async function handleStart() {
+  async function handleClockIn() {
     setStarting(true)
-    await supabase.rpc('start_route', { p_route_id: routeId! })
+    setError(null)
+    const { error } = await supabase.rpc('start_route', { p_route_id: routeId! })
+    if (error) setError(error.message)
     await load()
     setStarting(false)
+  }
+
+  async function handleClockOut() {
+    setClockingOut(true)
+    setError(null)
+    const { error } = await supabase.rpc('clock_out', { p_route_id: routeId! })
+    setClockingOut(false)
+    if (error) {
+      setError(error.message)
+      await load()
+      return
+    }
+    navigate(`/end-of-shift/${routeId}`)
   }
 
   if (!route || entries === null) {
@@ -63,7 +80,10 @@ export function RouteRun() {
   const pendingDropoffs = dropoffs.filter(
     (e) => e.dropoff_status === 'pending' && !e.late_pickup_by_owner
   ).length
-  const readyForShiftEnd = route.status === 'in_progress' && pendingDropoffs === 0
+  const clockedOut = route.clocked_out_at !== null
+  // Dogs can only be logged between clocking in and clocking out.
+  const canLog = route.status === 'in_progress' && !clockedOut
+  const readyToClockOut = canLog && pendingDropoffs === 0
 
   return (
     <div>
@@ -82,13 +102,22 @@ export function RouteRun() {
         <p className="font-display text-xl font-bold text-ocean-900">
           🚏 {totalStops} stop{totalStops === 1 ? '' : 's'} today
         </p>
+        {(route.clocked_in_at || route.clocked_out_at) && (
+          <p className="mt-1 text-sm text-ocean-700/70">
+            {route.clocked_in_at && `Clocked in ${formatTime(route.clocked_in_at)}`}
+            {route.clocked_in_at && route.clocked_out_at && ' · '}
+            {route.clocked_out_at && `Clocked out ${formatTime(route.clocked_out_at)}`}
+          </p>
+        )}
       </Card>
+
+      {error && <p className="mb-4 text-sm font-semibold text-red-600">{error}</p>}
 
       {route.status === 'pending' && (
         <Card className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-ocean-800">Ready to head out?</p>
-          <Button onClick={handleStart} disabled={starting}>
-            {starting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Start Route'}
+          <p className="text-ocean-800">Clock in to start your route.</p>
+          <Button onClick={handleClockIn} disabled={starting}>
+            {starting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : '⏰ Clock In'}
           </Button>
         </Card>
       )}
@@ -97,7 +126,7 @@ export function RouteRun() {
         <>
           <Section title="🚗 Pick Up">
             {pickups.map((entry) => (
-              <PickupCard key={entry.id} entry={entry} routeStarted onLogged={load} />
+              <PickupCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
             ))}
             {pickups.length === 0 && <EmptyRow text="No pickups on this route." />}
           </Section>
@@ -108,21 +137,28 @@ export function RouteRun() {
 
           <Section title="🏠 Drop Off">
             {dropoffs.map((entry) => (
-              <DropoffCard key={entry.id} entry={entry} onLogged={load} />
+              <DropoffCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
             ))}
             {dropoffs.length === 0 && <EmptyRow text="No dropoffs on this route." />}
           </Section>
 
-          {route.status === 'in_progress' && (
+          {canLog && (
             <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
               <p className="text-ocean-800">
-                {readyForShiftEnd
-                  ? "All dogs dropped off — you're ready to close out the day."
-                  : `${pendingDropoffs} drop-off${pendingDropoffs === 1 ? '' : 's'} left before you can end your shift.`}
+                {readyToClockOut
+                  ? "All dogs dropped off — you're ready to clock out."
+                  : `${pendingDropoffs} drop-off${pendingDropoffs === 1 ? '' : 's'} left before you can clock out.`}
               </p>
-              <Button disabled={!readyForShiftEnd} onClick={() => navigate(`/end-of-shift/${routeId}`)}>
-                End of Shift
+              <Button disabled={!readyToClockOut || clockingOut} onClick={handleClockOut}>
+                {clockingOut ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : '⏰ Clock Out'}
               </Button>
+            </Card>
+          )}
+
+          {route.status === 'in_progress' && clockedOut && (
+            <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
+              <p className="text-ocean-800">You're clocked out. Last step: your end of shift report.</p>
+              <Button onClick={() => navigate(`/end-of-shift/${routeId}`)}>End of Shift Report</Button>
             </Card>
           )}
 
@@ -221,10 +257,11 @@ function FarmTimes({ route, onLogged }: { route: Route; onLogged: () => void }) 
 
 function PickupCard({
   entry,
+  canLog,
   onLogged,
 }: {
   entry: EntryWithDog
-  routeStarted: boolean
+  canLog: boolean
   onLogged: () => void
 }) {
   const [note, setNote] = useState('')
@@ -257,7 +294,7 @@ function PickupCard({
         <DogInfo dog={entry.dog} />
         {done ? (
           <span className="font-semibold text-green-600">Picked up ✅</span>
-        ) : (
+        ) : !canLog ? null : (
           <div className="flex flex-col items-end gap-2">
             <Button onClick={handleLog} disabled={busy}>
               {submitting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Log Pickup'}
@@ -278,14 +315,22 @@ function PickupCard({
       {entry.dog.client.pickup_notes && (
         <p className="mt-1 text-sm text-ocean-700/70">Note: {entry.dog.client.pickup_notes}</p>
       )}
-      {!done && (
+      {!done && canLog && (
         <NoteToggle showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} />
       )}
     </Card>
   )
 }
 
-function DropoffCard({ entry, onLogged }: { entry: EntryWithDog; onLogged: () => void }) {
+function DropoffCard({
+  entry,
+  canLog,
+  onLogged,
+}: {
+  entry: EntryWithDog
+  canLog: boolean
+  onLogged: () => void
+}) {
   const [note, setNote] = useState('')
   const [showNote, setShowNote] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -308,7 +353,7 @@ function DropoffCard({ entry, onLogged }: { entry: EntryWithDog; onLogged: () =>
           </span>
         ) : done ? (
           <span className="font-semibold text-green-600">Dropped off ✅</span>
-        ) : (
+        ) : !canLog ? null : (
           <Button onClick={handleLog} disabled={submitting}>
             {submitting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Log Dropoff'}
           </Button>
@@ -317,7 +362,7 @@ function DropoffCard({ entry, onLogged }: { entry: EntryWithDog; onLogged: () =>
       {entry.dog.client.dropoff_notes && (
         <p className="mt-2 text-sm text-ocean-700/70">Note: {entry.dog.client.dropoff_notes}</p>
       )}
-      {!done && !entry.late_pickup_by_owner && (
+      {!done && !entry.late_pickup_by_owner && canLog && (
         <NoteToggle showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} />
       )}
     </Card>

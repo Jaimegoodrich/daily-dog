@@ -150,6 +150,8 @@ export function WeeklyReport() {
       date: r.date,
       employee_id: r.employee_id,
       employeeName: r.employee?.display_name ?? null,
+      clocked_in_at: r.clocked_in_at,
+      clocked_out_at: r.clocked_out_at,
     }))
   )
 
@@ -204,15 +206,15 @@ export function WeeklyReport() {
       ]),
       [],
       ['PAYROLL'],
-      ['Employee', 'Date', 'First Pickup', 'Last Dropoff', 'Hours (h:mm)', 'Hours (decimal)'],
+      ['Employee', 'Date', 'Clock In', 'Clock Out', 'Hours (h:mm)', 'Hours (decimal)'],
       ...payroll.flatMap((emp) => [
         ...emp.days.map((d) => [
           emp.name,
           d.date,
-          formatClockTime(d.firstPickup),
-          formatClockTime(d.lastDropoff),
-          d.firstPickup && d.lastDropoff ? formatDuration(d.minutes) : 'INCOMPLETE',
-          d.firstPickup && d.lastDropoff ? formatDecimalHours(d.minutes) : '',
+          formatClockTime(d.clockIn),
+          formatClockTime(d.clockOut),
+          d.clockOut ? formatDuration(d.minutes) : 'INCOMPLETE',
+          d.clockOut ? formatDecimalHours(d.minutes) : '',
         ]),
         [emp.name, 'WEEK TOTAL', '', '', formatDuration(emp.totalMinutes), formatDecimalHours(emp.totalMinutes)],
       ]),
@@ -280,15 +282,15 @@ export function WeeklyReport() {
     }
 
     lines.push('')
-    lines.push('PAYROLL (first pickup to last dropoff, rounded up to 15 min)')
-    if (payroll.length === 0) lines.push('  No pickups logged')
+    lines.push('PAYROLL (clock in to clock out, rounded up to 15 min)')
+    if (payroll.length === 0) lines.push('  No clock-ins logged')
     for (const emp of payroll) {
       lines.push(`  ${emp.name}`)
       for (const d of emp.days) {
         lines.push(
-          d.firstPickup && d.lastDropoff
-            ? `    ${formatDate(d.date)}: ${formatClockTime(d.firstPickup)} – ${formatClockTime(d.lastDropoff)} = ${formatDuration(d.minutes)} (${formatDecimalHours(d.minutes)} hrs)`
-            : `    ${formatDate(d.date)}: ${formatClockTime(d.firstPickup)} – ${formatClockTime(d.lastDropoff)} INCOMPLETE (${d.firstPickup ? 'no dropoff logged' : 'no pickup logged'})`
+          d.clockOut
+            ? `    ${formatDate(d.date)}: ${formatClockTime(d.clockIn)} – ${formatClockTime(d.clockOut)} = ${formatDuration(d.minutes)} (${formatDecimalHours(d.minutes)} hrs)`
+            : `    ${formatDate(d.date)}: ${formatClockTime(d.clockIn)} – ${formatClockTime(d.clockOut)} INCOMPLETE (no clock-out)`
         )
       }
       lines.push(`    Week total: ${formatDuration(emp.totalMinutes)} (${formatDecimalHours(emp.totalMinutes)} hrs)`)
@@ -444,10 +446,10 @@ export function WeeklyReport() {
 
       <Section title="💵 Payroll">
         <p className="mb-3 text-sm text-ocean-700/70">
-          Each day is the time from the employee's first pickup to their last dropoff, rounded up to the next 15 minutes.
+          Each day is the time from when the employee clocked in to when they clocked out, rounded up to the next 15 minutes.
           The week is the total of those days.
         </p>
-        {payroll.length === 0 && <Empty text="No pickups or dropoffs logged this week." />}
+        {payroll.length === 0 && <Empty text="No clock-ins logged this week." />}
         {payroll.map((emp) => (
           <div key={emp.employeeId} className="mb-5 last:mb-0">
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -464,8 +466,8 @@ export function WeeklyReport() {
                 <thead>
                   <tr className="text-left text-ocean-700/60">
                     <th className="pb-1 font-semibold">Date</th>
-                    <th className="pb-1 font-semibold">First pickup</th>
-                    <th className="pb-1 font-semibold">Last dropoff</th>
+                    <th className="pb-1 font-semibold">Clock in</th>
+                    <th className="pb-1 font-semibold">Clock out</th>
                     <th className="pb-1 text-right font-semibold">Time</th>
                     <th className="pb-1 text-right font-semibold">Hours</th>
                   </tr>
@@ -474,16 +476,16 @@ export function WeeklyReport() {
                   {emp.days.map((d) => (
                     <tr key={d.date} className="border-t border-sand-200 text-ocean-800">
                       <td className="py-1.5 font-semibold text-ocean-900">{formatDate(d.date)}</td>
-                      <td className="py-1.5">{formatClockTime(d.firstPickup)}</td>
-                      <td className="py-1.5">{formatClockTime(d.lastDropoff)}</td>
-                      {d.firstPickup && d.lastDropoff ? (
+                      <td className="py-1.5">{formatClockTime(d.clockIn)}</td>
+                      <td className="py-1.5">{formatClockTime(d.clockOut)}</td>
+                      {d.clockOut ? (
                         <>
                           <td className="py-1.5 text-right">{formatDuration(d.minutes)}</td>
                           <td className="py-1.5 text-right font-semibold">{formatDecimalHours(d.minutes)}</td>
                         </>
                       ) : (
                         <td colSpan={2} className="py-1.5 text-right text-xs font-semibold text-sun-700">
-                          {d.firstPickup ? 'No dropoff logged' : 'No pickup logged'}
+                          No clock-out
                         </td>
                       )}
                     </tr>

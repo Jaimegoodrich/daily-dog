@@ -93,6 +93,8 @@ export interface Route {
   status: RouteStatus
   arrived_at_farm_at: string | null
   left_farm_at: string | null
+  clocked_in_at: string | null
+  clocked_out_at: string | null
   created_at: string
 }
 
