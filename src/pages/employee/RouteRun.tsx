@@ -54,6 +54,14 @@ export function RouteRun() {
     .filter((e) => e.dropoff_route_id === routeId)
     .sort((a, b) => (a.dropoff_route_order ?? 0) - (b.dropoff_route_order ?? 0))
 
+  // A stop is one house: dogs from the same owner count once per leg. Late
+  // cancels still count since the driver went to the house.
+  const activeEntries = entries.filter((e) => !e.cancelled || e.late_cancel)
+  const countStops = (list: EntryWithDog[]) => new Set(list.map((e) => e.dog.client_id)).size
+  const pickupStops = countStops(activeEntries.filter((e) => e.pickup_route_id === routeId))
+  const dropoffStops = countStops(activeEntries.filter((e) => e.dropoff_route_id === routeId))
+  const totalStops = pickupStops + dropoffStops
+
   const pendingDropoffs = dropoffs.filter(
     (e) => e.dropoff_status === 'pending' && !e.late_pickup_by_owner
   ).length
@@ -71,6 +79,15 @@ export function RouteRun() {
       <h1 className="mb-4 font-display text-2xl font-extrabold text-ocean-900">
         Route {route.route_number}
       </h1>
+
+      <Card className="mb-6 flex flex-wrap items-baseline justify-between gap-2 bg-ocean-50">
+        <p className="font-display text-xl font-bold text-ocean-900">
+          🚏 {totalStops} stop{totalStops === 1 ? '' : 's'} today
+        </p>
+        <p className="text-sm text-ocean-700/70">
+          {pickupStops} pick up · {dropoffStops} drop off
+        </p>
+      </Card>
 
       {route.status === 'pending' && (
         <Card className="mb-6 flex flex-wrap items-center justify-between gap-3">
