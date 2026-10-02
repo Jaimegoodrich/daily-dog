@@ -77,9 +77,10 @@ export function RouteRun() {
     (e) => e.dropoff_status === 'pending' && !e.late_pickup_by_owner
   ).length
   const clockedOut = route.clocked_out_at !== null
-  // Dogs can only be logged between clocking in and clocking out.
-  const canLog = route.status === 'in_progress' && !clockedOut
-  const readyToClockOut = canLog && pendingDropoffs === 0
+  // Dogs can only be logged after clocking in and before the end of shift
+  // report; clocking out comes last, once the report is in.
+  const canLog = route.status === 'in_progress'
+  const allDroppedOff = pendingDropoffs === 0
 
   return (
     <div>
@@ -141,30 +142,31 @@ export function RouteRun() {
           {canLog && (
             <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
               <p className="text-ocean-800">
-                {readyToClockOut
-                  ? "All dogs dropped off — you're ready to clock out."
-                  : `${pendingDropoffs} drop-off${pendingDropoffs === 1 ? '' : 's'} left before you can clock out.`}
+                {allDroppedOff
+                  ? 'All dogs dropped off — fill out your end of shift report.'
+                  : `${pendingDropoffs} drop-off${pendingDropoffs === 1 ? '' : 's'} left before your end of shift report.`}
               </p>
-              <Button disabled={!readyToClockOut || clockingOut} onClick={handleClockOut}>
+              <Button disabled={!allDroppedOff} onClick={() => navigate(`/end-of-shift/${routeId}`)}>
+                End of Shift Report
+              </Button>
+            </Card>
+          )}
+
+          {/* Routes from before clock-in existed have nothing to clock out of. */}
+          {route.status === 'completed' && route.clocked_in_at && !clockedOut && (
+            <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
+              <p className="text-ocean-800">Report sent — last step is to clock out.</p>
+              <Button disabled={clockingOut} onClick={handleClockOut}>
                 {clockingOut ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Route finished! Clock out!'}
               </Button>
             </Card>
           )}
 
-          {route.status === 'in_progress' && clockedOut && (
+          {clockedOut && (
             <Card className="mt-6 flex flex-col items-center gap-3 bg-ocean-50 py-8 text-center">
               <PawPrint className="h-14 w-14 text-ocean-500" />
               <p className="font-display text-3xl font-extrabold text-ocean-900">You're Awesome!</p>
-              <p className="text-ocean-700/70">You're clocked out. Last step: your end of shift report.</p>
-              <Button onClick={() => navigate(`/end-of-shift/${routeId}`)}>End of Shift Report</Button>
-            </Card>
-          )}
-
-          {route.status === 'completed' && (
-            <Card className="mt-6 bg-green-50 text-center">
-              <p className="font-display font-bold text-green-700">
-                Shift complete for this route. Nice work! 🎉
-              </p>
+              <Button onClick={() => navigate('/today')}>Back to Today</Button>
             </Card>
           )}
         </>

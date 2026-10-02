@@ -14,7 +14,6 @@ export function EndOfShift() {
   const [clientIssues, setClientIssues] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -31,20 +30,8 @@ export function EndOfShift() {
       setError(error.message)
       return
     }
-    setDone(true)
-  }
-
-  if (done) {
-    return (
-      <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <p className="text-6xl">🌅</p>
-        <h1 className="font-display text-3xl font-extrabold text-ocean-900">
-          Thank you, you're AWESOME!
-        </h1>
-        <p className="text-ocean-700/70">Your daily report has been sent to the admin.</p>
-        <Button onClick={() => navigate('/today')}>Back to Today</Button>
-      </div>
-    )
+    // Back to the route page, where the last step is clocking out.
+    navigate(`/route/${routeId}`)
   }
 
   return (

@@ -661,29 +661,17 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_pending_dropoffs int;
 begin
-  perform 1 from routes
+  update routes
+  set clocked_out_at = now()
   where id = p_route_id
     and employee_id = current_employee_id()
-    and status = 'in_progress'
+    and status = 'completed'
     and clocked_out_at is null;
+
   if not found then
-    raise exception 'Route not found, not yours, not clocked in, or already clocked out';
+    raise exception 'Route not found, not yours, end of shift report not submitted, or already clocked out';
   end if;
-
-  select count(*) into v_pending_dropoffs
-  from schedule_entries
-  where dropoff_route_id = p_route_id
-    and dropoff_status = 'pending'
-    and late_pickup_by_owner = false;
-
-  if v_pending_dropoffs > 0 then
-    raise exception 'All dogs on this route must be logged as dropped off first';
-  end if;
-
-  update routes set clocked_out_at = now() where id = p_route_id;
 end;
 $$;
 
