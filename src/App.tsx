@@ -13,6 +13,7 @@ import { EmployeeDogList } from '@/pages/employee/DogList'
 import { EmployeeClientView } from '@/pages/employee/ClientView'
 import { AdminDashboard } from '@/pages/admin/Dashboard'
 import { AdminCalendar } from '@/pages/admin/Calendar'
+import { AdminBoarding } from '@/pages/admin/Boarding'
 import { WeeklySchedule } from '@/pages/admin/WeeklySchedule'
 import { AdminRoutes } from '@/pages/admin/Routes'
 import { AdminReports } from '@/pages/admin/Reports'
@@ -36,6 +37,7 @@ function AppRoutes() {
       { to: '/admin/clients', label: 'Clients' },
       { to: '/admin/schedule', label: 'Weekly Schedule' },
       { to: '/admin/calendar', label: 'Calendar' },
+      { to: '/admin/boarding', label: 'Boarding' },
       { to: '/admin/routes', label: 'Routes' },
       { to: '/admin/reports', label: 'Reports' },
       { to: '/admin/weekly-report', label: 'Weekly Report' },
@@ -50,6 +52,7 @@ function AppRoutes() {
           <Route path="/admin/clients/:clientId" element={<ClientForm />} />
           <Route path="/admin/schedule" element={<WeeklySchedule />} />
           <Route path="/admin/calendar" element={<AdminCalendar />} />
+          <Route path="/admin/boarding" element={<AdminBoarding />} />
           <Route path="/admin/routes" element={<AdminRoutes />} />
           <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/weekly-report" element={<WeeklyReport />} />

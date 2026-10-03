@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Card } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
 import type { Client, Dog, Route, ScheduleEntry } from '@/types/database'
+import { AfterHoursList } from '@/components/AfterHoursList'
 
 type EntryWithDog = ScheduleEntry & { dog: Dog & { client: Client } }
 
@@ -110,6 +111,15 @@ export function EmployeeSchedule() {
           )
         })}
       </div>
+
+      {employee && (
+        <AfterHoursList
+          employeeId={employee.id}
+          from={addDays(todayStr(), 1)}
+          to={addDays(todayStr(), 7)}
+          canLog={false}
+        />
+      )}
     </div>
   )
 }

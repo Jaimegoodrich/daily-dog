@@ -47,6 +47,7 @@ const REASON_LABELS: Record<string, string> = {
   rain: 'Rain',
   heat: 'Heat',
   admin: 'Admin',
+  boarding: 'Boarding',
   other: 'Other',
 }
 
@@ -111,7 +112,8 @@ export function WeeklyReport() {
   }
 
   const cancellations = entries
-    .filter((e) => e.cancelled)
+    // A hike replaced by a boarding stay isn't a real cancellation.
+    .filter((e) => e.cancelled && e.cancel_reason !== 'boarding')
     .sort((a, b) => a.check_in_date.localeCompare(b.check_in_date) || a.dog.name.localeCompare(b.dog.name))
 
   const adds = entries

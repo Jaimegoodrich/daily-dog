@@ -33,9 +33,12 @@ export function AdminRoutes() {
   }
 
   const activeEntries = entries.filter((e) => !e.cancelled)
-  const unassignedPickups = activeEntries.filter((e) => e.scheduled_pickup_date === date && !e.pickup_route_id)
+  const unassignedPickups = activeEntries.filter(
+    (e) => e.scheduled_pickup_date === date && !e.pickup_route_id && !e.after_hours_pickup
+  )
   const unassignedDropoffs = activeEntries.filter(
-    (e) => e.scheduled_dropoff_date === date && !e.dropoff_route_id && !e.late_pickup_by_owner
+    (e) =>
+      e.scheduled_dropoff_date === date && !e.dropoff_route_id && !e.late_pickup_by_owner && !e.after_hours_dropoff
   )
 
   return (

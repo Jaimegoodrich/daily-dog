@@ -10,7 +10,7 @@ export type ScheduleType = 'hike' | 'boarding'
 export type RouteStatus = 'pending' | 'in_progress' | 'completed'
 export type PickupStatus = 'pending' | 'picked_up'
 export type DropoffStatus = 'pending' | 'dropped_off'
-export type CancelReason = 'vet' | 'grooming' | 'vacation' | 'injury' | 'rain' | 'heat' | 'admin' | 'other'
+export type CancelReason = 'vet' | 'grooming' | 'vacation' | 'injury' | 'rain' | 'heat' | 'admin' | 'boarding' | 'other'
 
 export interface Profile {
   id: string
@@ -119,11 +119,26 @@ export interface ScheduleEntry {
   actual_dropoff_at: string | null
   pickup_issue_notes: string | null
   dropoff_issue_notes: string | null
+  belongings_notes: string | null
+  after_hours_pickup: boolean
+  after_hours_dropoff: boolean
   cancelled: boolean
   cancel_reason: CancelReason | null
   late_cancel: boolean
   created_at: string
   updated_at: string
+}
+
+export interface AfterHoursTransport {
+  id: string
+  schedule_entry_id: string
+  kind: 'pickup' | 'dropoff'
+  date: string
+  time: string
+  employee_id: string | null
+  status: 'pending' | 'done'
+  completed_at: string | null
+  created_at: string
 }
 
 export interface DogWeeklyPattern {

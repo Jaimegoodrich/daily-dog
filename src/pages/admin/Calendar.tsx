@@ -41,8 +41,9 @@ export function AdminCalendar() {
   const cancelledToday = entries.filter(
     (e) => e.cancelled && (e.scheduled_pickup_date === date || e.scheduled_dropoff_date === date)
   )
-  const unassignedPickups = activePickups.filter((e) => !e.pickup_route_id)
-  const unassignedDropoffs = activeDropoffs.filter((e) => !e.dropoff_route_id)
+  // After-hours boarding legs are scheduled from the Boarding tab, not on routes.
+  const unassignedPickups = activePickups.filter((e) => !e.pickup_route_id && !e.after_hours_pickup)
+  const unassignedDropoffs = activeDropoffs.filter((e) => !e.dropoff_route_id && !e.after_hours_dropoff)
 
   return (
     <div>
@@ -444,10 +445,14 @@ function EntryForm({
         </p>
       )}
 
-      <Select value={form.type ?? 'hike'} onChange={(e) => setType(e.target.value as ScheduleType)}>
-        <option value="hike">Daily Hike</option>
-        <option value="boarding">Boarding</option>
-      </Select>
+      {form.id ? (
+        <Select value={form.type ?? 'hike'} onChange={(e) => setType(e.target.value as ScheduleType)}>
+          <option value="hike">Daily Hike</option>
+          <option value="boarding">Boarding</option>
+        </Select>
+      ) : (
+        <p className="text-sm text-ocean-700/60">Daily hike. To book boarding, use the Boarding tab.</p>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Input

@@ -125,6 +125,16 @@ export function RouteRun() {
             {pickups.map((entry) => (
               <PickupCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
             ))}
+            {dropoffs
+              .filter((e) => e.type === 'boarding')
+              .map((entry) => (
+                <Card key={`home-${entry.id}`} className="bg-ocean-50">
+                  <p className="font-display text-lg font-bold text-ocean-900">{entry.dog.name}</p>
+                  <p className="text-sm text-ocean-800">
+                    🧳 Boarding, going home today — collect from the house for the hike. Log them at drop off.
+                  </p>
+                </Card>
+              ))}
             {pickups.length === 0 && <EmptyRow text="No pickups on this route." />}
           </Section>
 
@@ -220,6 +230,14 @@ function DogInfo({ dog }: { dog: Dog & { client: Client } }) {
   )
 }
 
+function BoardingBadge({ children }: { children: React.ReactNode }) {
+  return <p className="mt-2 rounded-lg bg-ocean-50 px-3 py-2 text-sm text-ocean-800">🧳 {children}</p>
+}
+
+function formatDate(date: string) {
+  return new Date(date + 'T00:00:00').toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' })
 }
@@ -280,12 +298,18 @@ function PickupCard({
   const [showNote, setShowNote] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [belongings, setBelongings] = useState('')
+  const boarding = entry.type === 'boarding'
   const done = entry.pickup_status === 'picked_up'
   const busy = submitting || cancelling
 
   async function handleLog() {
     setSubmitting(true)
-    await supabase.rpc('log_pickup', { p_schedule_entry_id: entry.id, p_note: note || undefined })
+    await supabase.rpc('log_pickup', {
+      p_schedule_entry_id: entry.id,
+      p_note: note || undefined,
+      p_belongings: belongings || undefined,
+    })
     setSubmitting(false)
     onLogged()
   }
@@ -321,8 +345,28 @@ function PickupCard({
           </div>
         )}
       </div>
+      {boarding && (
+        <BoardingBadge>
+          Boarding — after the hike, the dog stays at the house until {formatDate(entry.check_out_date)}.
+        </BoardingBadge>
+      )}
       {entry.dog.client.gate_code && (
         <p className="mt-2 text-sm text-ocean-700/70">Gate code: {entry.dog.client.gate_code}</p>
+      )}
+      {boarding && !done && canLog && (
+        <textarea
+          value={belongings}
+          onChange={(e) => setBelongings(e.target.value)}
+          placeholder="Notes (include belongings): bed, toys, food, medication..."
+          aria-label="Notes (include belongings)"
+          className="mt-3 w-full rounded-xl border border-sand-300 px-3 py-2 text-sm"
+        />
+      )}
+      {boarding && entry.belongings_notes && (
+        <p className="mt-2 text-sm text-ocean-800">
+          <span className="font-semibold">Belongings: </span>
+          {entry.belongings_notes}
+        </p>
       )}
       {entry.dog.client.pickup_notes && (
         <p className="mt-1 text-sm text-ocean-700/70">Note: {entry.dog.client.pickup_notes}</p>
@@ -371,6 +415,17 @@ function DropoffCard({
           </Button>
         )}
       </div>
+      {entry.type === 'boarding' && (
+        <BoardingBadge>
+          Boarding — going home today. Pick the dog up from the house for the hike.
+          {entry.belongings_notes && (
+            <span className="mt-1 block">
+              <span className="font-semibold">Send home: </span>
+              {entry.belongings_notes}
+            </span>
+          )}
+        </BoardingBadge>
+      )}
       {entry.dog.client.dropoff_notes && (
         <p className="mt-2 text-sm text-ocean-700/70">Note: {entry.dog.client.dropoff_notes}</p>
       )}

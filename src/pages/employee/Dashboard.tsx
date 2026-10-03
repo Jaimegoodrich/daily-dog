@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { AfterHoursList } from '@/components/AfterHoursList'
 import type { Route } from '@/types/database'
 
 function greeting() {
@@ -87,8 +88,14 @@ export function EmployeeDashboard() {
           </Card>
         ))}
       </div>
+
+      {employee && <AfterHoursList employeeId={employee.id} from={todayStr()} to={todayStr()} canLog />}
     </div>
   )
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
 }
 
 function StatusBadge({ status }: { status: Route['status'] }) {
