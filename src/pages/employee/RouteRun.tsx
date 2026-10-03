@@ -70,15 +70,11 @@ export function RouteRun() {
 
   // A stop is one owner: all their dogs, picked up and dropped off, count
   // once for the day. Late cancels still count since the driver went there.
-  // Jaime's house counts as one stop too.
-  // Boarders starting or ending a stay also mean a visit to Jaime's.
+  // Jaime's house isn't a stop: it's where the shift starts and ends.
   const stopEntries = entries.filter((e) => !e.cancelled || e.late_cancel)
-  const stopPickups = stopEntries.filter((e) => e.pickup_route_id === routeId)
-  const stopDropoffs = stopEntries.filter((e) => e.dropoff_route_id === routeId)
   const totalStops = new Set([
-    ...stopPickups.map((e) => (e.pickup_at_jaimes ? 'jaimes' : e.dog.client_id)),
-    ...stopDropoffs.map((e) => (e.dropoff_at_jaimes ? 'jaimes' : e.dog.client_id)),
-    ...(stopEntries.some((e) => e.type === 'boarding') ? ['jaimes'] : []),
+    ...stopEntries.filter((e) => e.pickup_route_id === routeId && !e.pickup_at_jaimes).map((e) => e.dog.client_id),
+    ...stopEntries.filter((e) => e.dropoff_route_id === routeId && !e.dropoff_at_jaimes).map((e) => e.dog.client_id),
   ]).size
 
   const pendingDropoffs = dropoffs.filter(

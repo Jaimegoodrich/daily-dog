@@ -117,7 +117,10 @@ export function WeeklyReport() {
     .sort((a, b) => a.check_in_date.localeCompare(b.check_in_date) || a.dog.name.localeCompare(b.dog.name))
 
   const adds = entries
-    .filter((e) => !e.cancelled && !patternByDog.get(e.dog_id)?.has(dayOfWeek(e.check_in_date)))
+    // Hikes added by a boarding stay aren't typical adds.
+    .filter(
+      (e) => !e.cancelled && !e.boarding_entry_id && !patternByDog.get(e.dog_id)?.has(dayOfWeek(e.check_in_date))
+    )
     .sort((a, b) => a.check_in_date.localeCompare(b.check_in_date) || a.dog.name.localeCompare(b.dog.name))
 
   const entryIssues = entries
