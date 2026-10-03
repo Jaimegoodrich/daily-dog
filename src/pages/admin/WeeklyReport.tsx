@@ -206,7 +206,7 @@ export function WeeklyReport() {
           const entry = allEntries.find((e) => e.dog_id === dogId && e.check_in_date === date)
           if (!entry) return ''
           if (entry.cancelled) return `Cancelled: ${REASON_LABELS[entry.cancel_reason ?? 'other']}`
-          return 'Scheduled'
+          return entry.boarding_entry_id ? 'Boarding hike' : 'Scheduled'
         }),
       ]),
       [],
@@ -279,7 +279,7 @@ export function WeeklyReport() {
         const entry = allEntries.find((e) => e.dog_id === dogId && e.check_in_date === date)
         if (!entry) return '—'
         if (entry.cancelled) return `${REASON_LABELS[entry.cancel_reason ?? 'other']} (cancelled)`
-        return 'Scheduled'
+        return entry.boarding_entry_id ? 'Boarding hike' : 'Scheduled'
       })
       lines.push(
         `  ${dogNames.get(dogId)}: ${weekDates.map((d, i) => `${WEEKDAY_SHORT[dayOfWeek(d)]} ${perDay[i]}`).join(', ')}`
@@ -432,6 +432,10 @@ export function WeeklyReport() {
                             title={`Cancelled: ${REASON_LABELS[entry.cancel_reason ?? 'other']}${entry.late_cancel ? ' (late cancel)' : ''}`}
                           >
                             {REASON_LABELS[entry.cancel_reason ?? 'other']}
+                          </span>
+                        ) : entry.boarding_entry_id ? (
+                          <span className="text-xs font-semibold text-ocean-600" title="Boarding hike">
+                            🧳
                           </span>
                         ) : (
                           <span className="font-bold text-ocean-600">✓</span>
