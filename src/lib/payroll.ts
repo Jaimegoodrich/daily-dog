@@ -42,6 +42,9 @@ const INCREMENT_MINUTES = 15
  *
  * Routes run before clock-in existed have no clock times; for those the first
  * pickup and last dropoff stand in, so older weeks still add up.
+ *
+ * After Hours Transports (boarding) are deliberately left out: they're paid
+ * separately as a side gig, not as hours.
  */
 export function computePayroll(entries: PayrollEntry[], routes: PayrollRoute[]): PayrollEmployee[] {
   // routeId -> logged pickup / dropoff times, for legacy routes with no clock times
