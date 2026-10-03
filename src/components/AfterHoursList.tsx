@@ -104,7 +104,7 @@ function TransportCard({
         <div>
           <p className="text-sm font-semibold text-ocean-600">
             {formatDay(transport.date)} · {formatTimeOfDay(transport.time)} ·{' '}
-            {isPickup ? 'Pick up → bring to the house' : 'Drop off → take home'}
+            {isPickup ? "Pick up → bring to Jaime's" : 'Drop off → take home'}
           </p>
           <p className="font-display text-lg font-bold text-ocean-900">{dog.name}</p>
           <p className="text-sm text-ocean-700/70">{dog.client.main_name}</p>

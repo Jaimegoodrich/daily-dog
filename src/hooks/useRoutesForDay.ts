@@ -96,6 +96,15 @@ export function useRoutesForDay(date: string) {
     load(false)
   }
 
+  // A one-day change of place for that leg; doesn't carry to future weeks.
+  async function setAtJaimes(entryId: string, field: 'pickup' | 'dropoff', atJaimes: boolean) {
+    await supabase
+      .from('schedule_entries')
+      .update({ [field === 'pickup' ? 'pickup_at_jaimes' : 'dropoff_at_jaimes']: atJaimes })
+      .eq('id', entryId)
+    load(false)
+  }
+
   const assignPickup = (entryId: string, routeId: string) => assign(entryId, routeId, 'pickup')
   const assignDropoff = (entryId: string, routeId: string) => assign(entryId, routeId, 'dropoff')
 
@@ -124,6 +133,7 @@ export function useRoutesForDay(date: string) {
     loading,
     load,
     setRouteEmployee,
+    setAtJaimes,
     assignPickup,
     assignDropoff,
     reorder,

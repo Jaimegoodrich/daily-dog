@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
 import type { Client, Dog, Route, ScheduleEntry } from '@/types/database'
 import { AfterHoursList } from '@/components/AfterHoursList'
+import { comparePickups, compareDropoffs } from '@/lib/routeOrder'
 
 type EntryWithDog = ScheduleEntry & { dog: Dog & { client: Client } }
 
@@ -93,10 +94,10 @@ export function EmployeeSchedule() {
         {routes.map((route) => {
           const pickups = entries
             .filter((e) => e.pickup_route_id === route.id)
-            .sort((a, b) => (a.pickup_route_order ?? 0) - (b.pickup_route_order ?? 0))
+            .sort(comparePickups)
           const dropoffs = entries
             .filter((e) => e.dropoff_route_id === route.id)
-            .sort((a, b) => (a.dropoff_route_order ?? 0) - (b.dropoff_route_order ?? 0))
+            .sort(compareDropoffs)
 
           return (
             <Card key={route.id}>

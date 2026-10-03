@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import type { Client, Dog, Route, ScheduleEntry } from '@/types/database'
+import { comparePickups, compareDropoffs } from '@/lib/routeOrder'
 
 type EntryWithDog = ScheduleEntry & { dog: Dog & { client: Client } }
 
@@ -62,16 +63,23 @@ export function RouteRun() {
 
   const pickups = entries
     .filter((e) => e.pickup_route_id === routeId)
-    .sort((a, b) => (a.pickup_route_order ?? 0) - (b.pickup_route_order ?? 0))
+    .sort(comparePickups)
   const dropoffs = entries
     .filter((e) => e.dropoff_route_id === routeId)
-    .sort((a, b) => (a.dropoff_route_order ?? 0) - (b.dropoff_route_order ?? 0))
+    .sort(compareDropoffs)
 
   // A stop is one owner: all their dogs, picked up and dropped off, count
   // once for the day. Late cancels still count since the driver went there.
-  const totalStops = new Set(
-    entries.filter((e) => !e.cancelled || e.late_cancel).map((e) => e.dog.client_id)
-  ).size
+  // Jaime's house counts as one stop too.
+  // Boarders starting or ending a stay also mean a visit to Jaime's.
+  const stopEntries = entries.filter((e) => !e.cancelled || e.late_cancel)
+  const stopPickups = stopEntries.filter((e) => e.pickup_route_id === routeId)
+  const stopDropoffs = stopEntries.filter((e) => e.dropoff_route_id === routeId)
+  const totalStops = new Set([
+    ...stopPickups.map((e) => (e.pickup_at_jaimes ? 'jaimes' : e.dog.client_id)),
+    ...stopDropoffs.map((e) => (e.dropoff_at_jaimes ? 'jaimes' : e.dog.client_id)),
+    ...(stopEntries.some((e) => e.type === 'boarding') ? ['jaimes'] : []),
+  ]).size
 
   const pendingDropoffs = dropoffs.filter(
     (e) => e.dropoff_status === 'pending' && !e.late_pickup_by_owner
@@ -122,19 +130,19 @@ export function RouteRun() {
       {route.status !== 'pending' && (
         <>
           <Section title="🚗 Pick Up">
-            {pickups.map((entry) => (
-              <PickupCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
-            ))}
             {dropoffs
               .filter((e) => e.type === 'boarding')
               .map((entry) => (
                 <Card key={`home-${entry.id}`} className="bg-ocean-50">
                   <p className="font-display text-lg font-bold text-ocean-900">{entry.dog.name}</p>
                   <p className="text-sm text-ocean-800">
-                    🧳 Boarding, going home today — collect from the house for the hike. Log them at drop off.
+                    🧳 Boarding, going home today — pick up from Jaime's house for the hike. Log them at drop off.
                   </p>
                 </Card>
               ))}
+            {pickups.map((entry) => (
+              <PickupCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
+            ))}
             {pickups.length === 0 && <EmptyRow text="No pickups on this route." />}
           </Section>
 
@@ -146,6 +154,16 @@ export function RouteRun() {
             {dropoffs.map((entry) => (
               <DropoffCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
             ))}
+            {pickups
+              .filter((e) => e.type === 'boarding')
+              .map((entry) => (
+                <Card key={`stay-${entry.id}`} className="bg-ocean-50">
+                  <p className="font-display text-lg font-bold text-ocean-900">{entry.dog.name}</p>
+                  <p className="text-sm text-ocean-800">
+                    🧳 Boarding, starting today — drop at Jaime's house after the hike.
+                  </p>
+                </Card>
+              ))}
             {dropoffs.length === 0 && <EmptyRow text="No dropoffs on this route." />}
           </Section>
 
@@ -210,7 +228,7 @@ function EmptyRow({ text }: { text: string }) {
   return <p className="text-sm text-ocean-700/50">{text}</p>
 }
 
-function DogInfo({ dog }: { dog: Dog & { client: Client } }) {
+function DogInfo({ dog, atJaimes }: { dog: Dog & { client: Client }; atJaimes: boolean }) {
   return (
     <div>
       <p className="font-display text-lg font-bold text-ocean-900">
@@ -222,7 +240,11 @@ function DogInfo({ dog }: { dog: Dog & { client: Client } }) {
         )}
       </p>
       <p className="text-sm text-ocean-700/70">{dog.client.main_name}</p>
-      {dog.client.address && <p className="text-sm text-ocean-700/70">{dog.client.address}</p>}
+      {atJaimes ? (
+        <p className="text-sm font-semibold text-sun-700">🏡 At Jaime's house, not the owner's address</p>
+      ) : (
+        dog.client.address && <p className="text-sm text-ocean-700/70">{dog.client.address}</p>
+      )}
       <Link to={`/dogs/${dog.client.id}`} className="text-sm font-semibold text-ocean-600 hover:underline">
         View dog info →
       </Link>
@@ -327,7 +349,7 @@ function PickupCard({
   return (
     <Card className={done ? 'border-green-300 bg-green-50' : ''}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <DogInfo dog={entry.dog} />
+        <DogInfo dog={entry.dog} atJaimes={entry.pickup_at_jaimes} />
         {done ? (
           <span className="font-semibold text-green-600">Picked up ✅</span>
         ) : !canLog ? null : (
@@ -347,10 +369,10 @@ function PickupCard({
       </div>
       {boarding && (
         <BoardingBadge>
-          Boarding — after the hike, the dog stays at the house until {formatDate(entry.check_out_date)}.
+          Boarding — after the hike, drop at Jaime's house. Staying until {formatDate(entry.check_out_date)}.
         </BoardingBadge>
       )}
-      {entry.dog.client.gate_code && (
+      {entry.dog.client.gate_code && !entry.pickup_at_jaimes && (
         <p className="mt-2 text-sm text-ocean-700/70">Gate code: {entry.dog.client.gate_code}</p>
       )}
       {boarding && !done && canLog && (
@@ -402,7 +424,7 @@ function DropoffCard({
   return (
     <Card className={done ? 'border-green-300 bg-green-50' : ''}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <DogInfo dog={entry.dog} />
+        <DogInfo dog={entry.dog} atJaimes={entry.dropoff_at_jaimes} />
         {entry.late_pickup_by_owner ? (
           <span className="rounded-full bg-sun-100 px-3 py-1 text-sm font-semibold text-sun-700">
             Owner picking up late
@@ -417,7 +439,7 @@ function DropoffCard({
       </div>
       {entry.type === 'boarding' && (
         <BoardingBadge>
-          Boarding — going home today. Pick the dog up from the house for the hike.
+          Boarding — going home today. Pick up from Jaime's house for the hike.
           {entry.belongings_notes && (
             <span className="mt-1 block">
               <span className="font-semibold">Send home: </span>

@@ -122,6 +122,9 @@ export interface ScheduleEntry {
   belongings_notes: string | null
   after_hours_pickup: boolean
   after_hours_dropoff: boolean
+  pickup_at_jaimes: boolean
+  dropoff_at_jaimes: boolean
+  boarding_entry_id: string | null
   cancelled: boolean
   cancel_reason: CancelReason | null
   late_cancel: boolean

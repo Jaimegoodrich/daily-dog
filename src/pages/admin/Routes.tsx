@@ -7,6 +7,7 @@ import { Select, Input } from '@/components/ui/Field'
 import { Spinner } from '@/components/ui/Spinner'
 import { useRoutesForDay, type EntryWithDog } from '@/hooks/useRoutesForDay'
 import type { Route } from '@/types/database'
+import { comparePickups, compareDropoffs } from '@/lib/routeOrder'
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -20,6 +21,7 @@ export function AdminRoutes() {
     employees,
     loading,
     setRouteEmployee,
+    setAtJaimes,
     assignPickup,
     assignDropoff,
     reorder,
@@ -95,10 +97,10 @@ export function AdminRoutes() {
       {routes.map((route) => {
         const pickupList = activeEntries
           .filter((e) => e.pickup_route_id === route.id)
-          .sort((a, b) => (a.pickup_route_order ?? 0) - (b.pickup_route_order ?? 0))
+          .sort(comparePickups)
         const dropoffList = activeEntries
           .filter((e) => e.dropoff_route_id === route.id)
-          .sort((a, b) => (a.dropoff_route_order ?? 0) - (b.dropoff_route_order ?? 0))
+          .sort(compareDropoffs)
 
         return (
           <div key={route.id} className="mt-8">
@@ -110,7 +112,9 @@ export function AdminRoutes() {
                 onReorder={(from, to) => reorder(pickupList, 'pickup_route_order', from, to)}
                 routes={routes}
                 currentRouteId={route.id}
+                field="pickup"
                 onMove={(id, routeId) => assignPickup(id, routeId)}
+                onSetAtJaimes={(id, value) => setAtJaimes(id, 'pickup', value)}
                 onRemove={(id) => assignPickup(id, '')}
               />
               <OrderedList
@@ -119,7 +123,9 @@ export function AdminRoutes() {
                 onReorder={(from, to) => reorder(dropoffList, 'dropoff_route_order', from, to)}
                 routes={routes}
                 currentRouteId={route.id}
+                field="dropoff"
                 onMove={(id, routeId) => assignDropoff(id, routeId)}
+                onSetAtJaimes={(id, value) => setAtJaimes(id, 'dropoff', value)}
                 onRemove={(id) => assignDropoff(id, '')}
               />
             </div>
@@ -163,16 +169,20 @@ function OrderedList({
   list,
   routes,
   currentRouteId,
+  field,
   onReorder,
   onMove,
+  onSetAtJaimes,
   onRemove,
 }: {
   title: string
   list: EntryWithDog[]
   routes: Route[]
   currentRouteId: string
+  field: 'pickup' | 'dropoff'
   onReorder: (fromIndex: number, toIndex: number) => void
   onMove: (id: string, routeId: string) => void
+  onSetAtJaimes: (id: string, atJaimes: boolean) => void
   onRemove: (id: string) => void
 }) {
   // Separate sensors per dnd-kit's own guidance: a distance-based constraint
@@ -205,7 +215,9 @@ function OrderedList({
                 entry={entry}
                 index={i}
                 otherRoutes={routes.filter((r) => r.id !== currentRouteId)}
+                field={field}
                 onMove={onMove}
+                onSetAtJaimes={onSetAtJaimes}
                 onRemove={onRemove}
               />
             ))}
@@ -221,15 +233,28 @@ function SortableRow({
   entry,
   index,
   otherRoutes,
+  field,
   onMove,
+  onSetAtJaimes,
   onRemove,
 }: {
   entry: EntryWithDog
   index: number
   otherRoutes: Route[]
+  field: 'pickup' | 'dropoff'
   onMove: (id: string, routeId: string) => void
+  onSetAtJaimes: (id: string, atJaimes: boolean) => void
   onRemove: (id: string) => void
 }) {
+  const atJaimes = field === 'pickup' ? entry.pickup_at_jaimes : entry.dropoff_at_jaimes
+  const verb = field === 'pickup' ? 'Pick up' : 'Drop'
+
+  function handleMenu(value: string) {
+    if (value === 'jaimes') onSetAtJaimes(entry.id, true)
+    else if (value === 'home') onSetAtJaimes(entry.id, false)
+    else if (value) onMove(entry.id, value)
+  }
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: entry.id })
 
   return (
@@ -249,23 +274,31 @@ function SortableRow({
           ⠿
         </span>
         {index + 1}. {entry.dog.name}
+        {atJaimes && (
+          <span className="rounded-full bg-sun-100 px-2 py-0.5 text-xs font-semibold text-sun-800">
+            🏡 {verb} at Jaime's
+          </span>
+        )}
       </p>
       <div className="flex items-center gap-3 text-sm">
-        {otherRoutes.length > 0 && (
-          <Select
-            value=""
-            onChange={(e) => e.target.value && onMove(entry.id, e.target.value)}
-            aria-label={`Move ${entry.dog.name} to another route`}
-            className="w-28! px-2! py-1! text-sm"
-          >
-            <option value="">Move to...</option>
-            {otherRoutes.map((r) => (
-              <option key={r.id} value={r.id}>
-                Route {r.route_number}
-              </option>
-            ))}
-          </Select>
-        )}
+        <Select
+          value=""
+          onChange={(e) => handleMenu(e.target.value)}
+          aria-label={`Move ${entry.dog.name} to another route or place`}
+          className="w-28! px-2! py-1! text-sm"
+        >
+          <option value="">Move to...</option>
+          {otherRoutes.map((r) => (
+            <option key={r.id} value={r.id}>
+              Route {r.route_number}
+            </option>
+          ))}
+          {atJaimes ? (
+            <option value="home">{field === 'pickup' ? 'Pick up at home' : 'Drop at home'}</option>
+          ) : (
+            <option value="jaimes">{verb} at Jaime's</option>
+          )}
+        </Select>
         <button onClick={() => onRemove(entry.id)} className="text-ocean-700">
           ✕
         </button>

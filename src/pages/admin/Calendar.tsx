@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { CancelScheduleForm } from '@/components/CancelScheduleForm'
 import { useRoutesForDay, type EntryWithDog } from '@/hooks/useRoutesForDay'
 import type { Dog, Route, ScheduleEntry, ScheduleType } from '@/types/database'
+import { comparePickups, compareDropoffs } from '@/lib/routeOrder'
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -75,10 +76,10 @@ export function AdminCalendar() {
           {routes.map((route) => {
             const pickupList = activePickups
               .filter((e) => e.pickup_route_id === route.id)
-              .sort((a, b) => (a.pickup_route_order ?? 0) - (b.pickup_route_order ?? 0))
+              .sort(comparePickups)
             const dropoffList = activeDropoffs
               .filter((e) => e.dropoff_route_id === route.id)
-              .sort((a, b) => (a.dropoff_route_order ?? 0) - (b.dropoff_route_order ?? 0))
+              .sort(compareDropoffs)
 
             return (
               <div key={route.id} className="mb-8">
