@@ -131,6 +131,7 @@ export interface DogWeeklyPattern {
   dog_id: string
   day_of_week: number
   default_route_number: number | null
+  default_dropoff_route_number: number | null
   created_at: string
 }
 

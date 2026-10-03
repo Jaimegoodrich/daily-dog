@@ -23,12 +23,18 @@ export function EmployeeDashboard() {
   useEffect(() => {
     if (!employee) return
     const today = new Date().toISOString().slice(0, 10)
+    // Sets up today's routes from admin's saved weekly defaults, in case
+    // admin hasn't opened today yet.
     supabase
-      .from('routes')
-      .select('*')
-      .eq('date', today)
-      .eq('employee_id', employee.id)
-      .order('route_number')
+      .rpc('prepare_day', { p_date: today })
+      .then(() =>
+        supabase
+          .from('routes')
+          .select('*')
+          .eq('date', today)
+          .eq('employee_id', employee.id)
+          .order('route_number')
+      )
       .then(({ data }) => setRoutes(data ?? []))
     supabase
       .from('admin_notes')

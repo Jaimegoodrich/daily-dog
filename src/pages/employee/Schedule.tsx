@@ -38,6 +38,10 @@ export function EmployeeSchedule() {
     if (!employee) return
 
     async function load() {
+      // Sets up the coming week from admin's saved weekly defaults.
+      await Promise.all(
+        Array.from({ length: 7 }, (_, i) => supabase.rpc('prepare_day', { p_date: addDays(todayStr(), i + 1) }))
+      )
       const { data: routeData } = await supabase
         .from('routes')
         .select('*')

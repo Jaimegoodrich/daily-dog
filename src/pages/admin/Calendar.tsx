@@ -21,7 +21,7 @@ function addDays(dateStr: string, days: number) {
 
 export function AdminCalendar() {
   const [date, setDate] = useState(todayStr())
-  const { routes, entries, loading, load, assignPickup, assignDropoff, setDefaultRoute } = useRoutesForDay(date)
+  const { routes, entries, loading, load, assignPickup, assignDropoff } = useRoutesForDay(date)
   const [editing, setEditing] = useState<Partial<ScheduleEntry> | null>(null)
   const [cancelTarget, setCancelTarget] = useState<ScheduleEntry | null>(null)
 
@@ -89,7 +89,6 @@ export function AdminCalendar() {
                     routes={routes}
                     field="pickup"
                     onAssign={assignPickup}
-                    onSetDefault={setDefaultRoute}
                     onEdit={setEditing}
                     onCancel={setCancelTarget}
                     onDelete={handleDelete}
@@ -100,7 +99,6 @@ export function AdminCalendar() {
                     routes={routes}
                     field="dropoff"
                     onAssign={assignDropoff}
-                    onSetDefault={setDefaultRoute}
                     onEdit={setEditing}
                     onCancel={setCancelTarget}
                     onDelete={handleDelete}
@@ -119,7 +117,6 @@ export function AdminCalendar() {
                 routes={routes}
                 field="pickup"
                 onAssign={assignPickup}
-                onSetDefault={setDefaultRoute}
                 onEdit={setEditing}
                 onCancel={setCancelTarget}
                 onDelete={handleDelete}
@@ -130,7 +127,6 @@ export function AdminCalendar() {
                 routes={routes}
                 field="dropoff"
                 onAssign={assignDropoff}
-                onSetDefault={setDefaultRoute}
                 onEdit={setEditing}
                 onCancel={setCancelTarget}
                 onDelete={handleDelete}
@@ -219,7 +215,6 @@ function RouteColumn({
   routes,
   field,
   onAssign,
-  onSetDefault,
   onEdit,
   onCancel,
   onDelete,
@@ -229,7 +224,6 @@ function RouteColumn({
   routes: Route[]
   field: 'pickup' | 'dropoff'
   onAssign: (entryId: string, routeId: string) => void
-  onSetDefault: (entryId: string, routeId: string) => void
   onEdit: (e: ScheduleEntry) => void
   onCancel: (e: ScheduleEntry) => void
   onDelete: (id: string) => void
@@ -273,15 +267,6 @@ function RouteColumn({
                     </option>
                   ))}
                 </Select>
-                {currentRouteId && (
-                  <button
-                    onClick={() => onSetDefault(entry.id, currentRouteId)}
-                    title="Make this route the default for this dog on this weekday"
-                    className="text-xs font-semibold text-ocean-700/50 hover:text-ocean-700"
-                  >
-                    ☆ Set as default
-                  </button>
-                )}
               </div>
             </Card>
           )
