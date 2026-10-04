@@ -37,12 +37,12 @@ function AppRoutes() {
       { to: '/admin/routes', label: 'Routes' },
       { to: '/admin/calendar', label: 'Calendar' },
       { to: '/admin/boarding', label: 'Boarding' },
+      { to: '/admin/clients', label: 'Clients' },
       { to: '/admin/schedule', label: 'Weekly Schedule' },
       { to: '/admin/reports', label: 'Reports' },
       { to: '/admin/weekly-report', label: 'Weekly Report' },
       { to: '/admin/employees', label: 'Employees' },
       { to: '/admin/gallery', label: 'Gallery' },
-      { to: '/admin/clients', label: 'Clients' },
     ]
     return (
       <Layout navItems={navItems}>
