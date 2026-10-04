@@ -22,16 +22,20 @@ export function useRoutesForDay(date: string) {
   const [entries, setEntries] = useState<EntryWithDog[]>([])
   const [employees, setEmployees] = useState<EmployeeOption[]>([])
   const [loading, setLoading] = useState(true)
+  // Set when the day's automatic setup fails (usually a database update that
+  // hasn't been run yet), so it's visible instead of routes silently empty.
+  const [setupError, setSetupError] = useState<string | null>(null)
 
   async function load(showSpinner = true) {
     if (showSpinner) setLoading(true)
     // Safety net: backfill this month's recurring hike days even if nobody
     // has opened the Weekly Schedule page for it yet.
     const [year, month] = date.split('-').map(Number)
-    await supabase.rpc('ensure_schedule_for_month', { p_year: year, p_month: month })
+    const { error: ensureError } = await supabase.rpc('ensure_schedule_for_month', { p_year: year, p_month: month })
     // Auto-slot dogs onto their default route for this weekday, if one is set
     // and a route with that number already exists for this date.
-    await supabase.rpc('apply_default_routes_for_date', { p_date: date })
+    const { error: applyError } = await supabase.rpc('apply_default_routes_for_date', { p_date: date })
+    setSetupError(ensureError?.message ?? applyError?.message ?? null)
 
     const [{ data: routeData }, { data: entryData }, { data: employeeData }] = await Promise.all([
       supabase.from('routes').select('*').eq('date', date).order('route_number'),
@@ -131,6 +135,7 @@ export function useRoutesForDay(date: string) {
     entries,
     employees,
     loading,
+    setupError,
     load,
     setRouteEmployee,
     setAtJaimes,

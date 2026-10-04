@@ -20,6 +20,7 @@ export function AdminRoutes() {
     entries,
     employees,
     loading,
+    setupError,
     setRouteEmployee,
     setAtJaimes,
     assignPickup,
@@ -49,6 +50,12 @@ export function AdminRoutes() {
         <h1 className="font-display text-2xl font-extrabold text-ocean-900">🗺️ Routes</h1>
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" />
       </div>
+
+      {setupError && (
+        <p className="mb-6 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          Couldn't set up this day's routes automatically: {setupError}
+        </p>
+      )}
 
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[1, 2, 3].map((num) => {
