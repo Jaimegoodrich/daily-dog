@@ -34,15 +34,15 @@ function AppRoutes() {
   if (profile.role === 'admin') {
     const navItems = [
       { to: '/admin', label: 'Dashboard' },
-      { to: '/admin/clients', label: 'Clients' },
-      { to: '/admin/schedule', label: 'Weekly Schedule' },
+      { to: '/admin/routes', label: 'Routes' },
       { to: '/admin/calendar', label: 'Calendar' },
       { to: '/admin/boarding', label: 'Boarding' },
-      { to: '/admin/routes', label: 'Routes' },
+      { to: '/admin/schedule', label: 'Weekly Schedule' },
       { to: '/admin/reports', label: 'Reports' },
       { to: '/admin/weekly-report', label: 'Weekly Report' },
       { to: '/admin/employees', label: 'Employees' },
       { to: '/admin/gallery', label: 'Gallery' },
+      { to: '/admin/clients', label: 'Clients' },
     ]
     return (
       <Layout navItems={navItems}>
