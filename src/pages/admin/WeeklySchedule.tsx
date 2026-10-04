@@ -72,6 +72,23 @@ export function WeeklySchedule() {
     if (!selectedDog) return
     if (pattern.has(day)) {
       await supabase.from('dog_weekly_pattern').delete().eq('dog_id', selectedDog.id).eq('day_of_week', day)
+      // Also clear that weekday's upcoming hikes that were already filled in
+      // from the old pattern (not ones that already happened, and not hikes
+      // belonging to a boarding stay), so the dog stops showing on routes.
+      const now = new Date()
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      const { data: upcoming } = await supabase
+        .from('schedule_entries')
+        .select('id, check_in_date')
+        .eq('dog_id', selectedDog.id)
+        .eq('type', 'hike')
+        .eq('pickup_status', 'pending')
+        .is('boarding_entry_id', null)
+        .gte('check_in_date', today)
+      const staleIds = (upcoming ?? [])
+        .filter((e) => new Date(e.check_in_date + 'T00:00:00').getDay() === day)
+        .map((e) => e.id)
+      if (staleIds.length > 0) await supabase.from('schedule_entries').delete().in('id', staleIds)
     } else {
       await supabase.from('dog_weekly_pattern').insert({ dog_id: selectedDog.id, day_of_week: day })
     }
