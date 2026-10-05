@@ -320,7 +320,9 @@ function BoardingForm({
         return setError(error.message)
       }
       entryId = data as string
-    } else if (checkIn !== stay!.check_in_date || checkOut !== stay!.check_out_date) {
+    } else {
+      // Also rebuilds the stay's daily hikes even when the dates are the same,
+      // so saving refreshes a stay after other changes (e.g. an undone cancel).
       const { error } = await supabase.rpc('change_boarding_dates', {
         p_entry_id: entryId,
         p_check_in: checkIn,

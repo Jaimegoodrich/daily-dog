@@ -26,6 +26,12 @@ export function AdminCalendar() {
   const [editing, setEditing] = useState<Partial<ScheduleEntry> | null>(null)
   const [cancelTarget, setCancelTarget] = useState<ScheduleEntry | null>(null)
 
+  async function handleUndoCancel(id: string) {
+    const { error } = await supabase.rpc('restore_hike', { p_entry_id: id })
+    if (error) alert(error.message)
+    load()
+  }
+
   async function handleDelete(id: string) {
     if (!confirm('Remove this schedule entry?')) return
     await supabase.from('schedule_entries').delete().eq('id', id)
@@ -152,7 +158,12 @@ export function AdminCalendar() {
           {cancelledToday.length > 0 && (
             <div className="mb-8">
               <h2 className="mb-3 font-display text-xl font-bold text-ocean-900">Cancelled</h2>
-              <SimpleEntryList entries={cancelledToday} onEdit={setEditing} onDelete={handleDelete} />
+              <SimpleEntryList
+                entries={cancelledToday}
+                onEdit={setEditing}
+                onUndoCancel={handleUndoCancel}
+                onDelete={handleDelete}
+              />
             </div>
           )}
         </>
@@ -283,11 +294,13 @@ function SimpleEntryList({
   entries,
   onEdit,
   onCancel,
+  onUndoCancel,
   onDelete,
 }: {
   entries: EntryWithDog[]
   onEdit: (e: ScheduleEntry) => void
   onCancel?: (e: ScheduleEntry) => void
+  onUndoCancel?: (id: string) => void
   onDelete: (id: string) => void
 }) {
   return (
@@ -309,6 +322,14 @@ function SimpleEntryList({
               {onCancel && !entry.cancelled && (
                 <button onClick={() => onCancel(entry)} className="font-semibold text-ocean-800 hover:underline">
                   Cancel
+                </button>
+              )}
+              {onUndoCancel && entry.cancelled && entry.type === 'hike' && (
+                <button
+                  onClick={() => onUndoCancel(entry.id)}
+                  className="font-semibold text-green-700 hover:underline"
+                >
+                  Undo cancellation
                 </button>
               )}
               <button onClick={() => onDelete(entry.id)} className="font-semibold text-ocean-700 hover:underline">
