@@ -7,7 +7,8 @@ import { Spinner } from '@/components/ui/Spinner'
 import type { Client, Dog, Route, ScheduleEntry } from '@/types/database'
 import { comparePickups, compareDropoffs } from '@/lib/routeOrder'
 
-type EntryWithDog = ScheduleEntry & { dog: Dog & { client: Client } }
+// stay: the boarding booking this hike is part of, if any.
+type EntryWithDog = ScheduleEntry & { dog: Dog & { client: Client }; stay: ScheduleEntry | null }
 
 export function RouteRun() {
   const { routeId } = useParams<{ routeId: string }>()
@@ -23,7 +24,7 @@ export function RouteRun() {
       supabase.from('routes').select('*').eq('id', routeId).single(),
       supabase
         .from('schedule_entries')
-        .select('*, dog:dogs(*, client:clients(*))')
+        .select('*, dog:dogs(*, client:clients(*)), stay:schedule_entries!boarding_entry_id(*)')
         .or(`pickup_route_id.eq.${routeId},dropoff_route_id.eq.${routeId}`),
     ])
     setRoute(routeData)
@@ -126,16 +127,6 @@ export function RouteRun() {
       {route.status !== 'pending' && (
         <>
           <Section title="🚗 Pick Up">
-            {dropoffs
-              .filter((e) => e.type === 'boarding')
-              .map((entry) => (
-                <Card key={`home-${entry.id}`} className="bg-ocean-50">
-                  <p className="font-display text-lg font-bold text-ocean-900">{entry.dog.name}</p>
-                  <p className="text-sm text-ocean-800">
-                    🧳 Boarding, going home today — pick up from Jaime's house for the hike. Log them at drop off.
-                  </p>
-                </Card>
-              ))}
             {pickups.map((entry) => (
               <PickupCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
             ))}
@@ -150,16 +141,6 @@ export function RouteRun() {
             {dropoffs.map((entry) => (
               <DropoffCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
             ))}
-            {pickups
-              .filter((e) => e.type === 'boarding')
-              .map((entry) => (
-                <Card key={`stay-${entry.id}`} className="bg-ocean-50">
-                  <p className="font-display text-lg font-bold text-ocean-900">{entry.dog.name}</p>
-                  <p className="text-sm text-ocean-800">
-                    🧳 Boarding, starting today — drop at Jaime's house after the hike.
-                  </p>
-                </Card>
-              ))}
             {dropoffs.length === 0 && <EmptyRow text="No dropoffs on this route." />}
           </Section>
 
@@ -317,7 +298,8 @@ function PickupCard({
   const [submitting, setSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [belongings, setBelongings] = useState('')
-  const boarding = entry.type === 'boarding'
+  const { stay } = entry
+  const checkInDay = !!stay && entry.check_in_date === stay.check_in_date
   const done = entry.pickup_status === 'picked_up'
   const busy = submitting || cancelling
 
@@ -363,15 +345,17 @@ function PickupCard({
           </div>
         )}
       </div>
-      {boarding && (
+      {stay && (
         <BoardingBadge>
-          Boarding — after the hike, drop at Jaime's house. Staying until {formatDate(entry.check_out_date)}.
+          {checkInDay
+            ? `Boarding starts today — after the hike, drop at Jaime's. Staying until ${formatDate(stay.check_out_date)}.`
+            : `Boarding — staying at Jaime's until ${formatDate(stay.check_out_date)}.`}
         </BoardingBadge>
       )}
       {entry.dog.client.gate_code && !entry.pickup_at_jaimes && (
         <p className="mt-2 text-sm text-ocean-700/70">Gate code: {entry.dog.client.gate_code}</p>
       )}
-      {boarding && !done && canLog && (
+      {checkInDay && !done && canLog && (
         <textarea
           value={belongings}
           onChange={(e) => setBelongings(e.target.value)}
@@ -380,10 +364,10 @@ function PickupCard({
           className="mt-3 w-full rounded-xl border border-sand-300 px-3 py-2 text-sm"
         />
       )}
-      {boarding && entry.belongings_notes && (
+      {stay?.belongings_notes && (
         <p className="mt-2 text-sm text-ocean-800">
           <span className="font-semibold">Belongings: </span>
-          {entry.belongings_notes}
+          {stay.belongings_notes}
         </p>
       )}
       {entry.dog.client.pickup_notes && (
@@ -433,14 +417,20 @@ function DropoffCard({
           </Button>
         )}
       </div>
-      {entry.type === 'boarding' && (
+      {entry.stay && (
         <BoardingBadge>
-          Boarding — going home today. Pick up from Jaime's house for the hike.
-          {entry.belongings_notes && (
-            <span className="mt-1 block">
-              <span className="font-semibold">Send home: </span>
-              {entry.belongings_notes}
-            </span>
+          {entry.dropoff_at_jaimes ? (
+            'Boarding — back to Jaime\'s after the hike.'
+          ) : (
+            <>
+              Boarding ends — going home today.
+              {entry.stay.belongings_notes && (
+                <span className="mt-1 block">
+                  <span className="font-semibold">Send home: </span>
+                  {entry.stay.belongings_notes}
+                </span>
+              )}
+            </>
           )}
         </BoardingBadge>
       )}

@@ -42,9 +42,9 @@ export function AdminCalendar() {
   const cancelledToday = entries.filter(
     (e) => e.cancelled && (e.scheduled_pickup_date === date || e.scheduled_dropoff_date === date)
   )
-  // After-hours boarding legs are scheduled from the Boarding tab, not on routes.
-  const unassignedPickups = activePickups.filter((e) => !e.pickup_route_id && !e.after_hours_pickup)
-  const unassignedDropoffs = activeDropoffs.filter((e) => !e.dropoff_route_id && !e.after_hours_dropoff)
+  // Boarding bookings never go on routes; each day of a stay is its own hike.
+  const unassignedPickups = activePickups.filter((e) => e.type === 'hike' && !e.pickup_route_id)
+  const unassignedDropoffs = activeDropoffs.filter((e) => e.type === 'hike' && !e.dropoff_route_id)
 
   return (
     <div>

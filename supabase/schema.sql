@@ -509,9 +509,9 @@ begin
     select se.id, dwp.default_route_number as route_number, dwp.default_pickup_order as default_order
     from schedule_entries se
     join dog_weekly_pattern dwp on dwp.dog_id = se.dog_id and dwp.day_of_week = v_dow
-    where se.check_in_date = p_date
+    where se.type = 'hike'
+      and se.check_in_date = p_date
       and se.cancelled = false
-      and se.after_hours_pickup = false
       and se.pickup_route_id is null
       and dwp.default_route_number is not null
     order by dwp.default_pickup_order nulls last, se.created_at
@@ -534,10 +534,10 @@ begin
     select se.id, dwp.default_dropoff_route_number as route_number, dwp.default_dropoff_order as default_order
     from schedule_entries se
     join dog_weekly_pattern dwp on dwp.dog_id = se.dog_id and dwp.day_of_week = v_dow
-    where se.check_out_date = p_date
+    where se.type = 'hike'
+      and se.check_out_date = p_date
       and se.cancelled = false
       and se.late_pickup_by_owner = false
-      and se.after_hours_dropoff = false
       and se.dropoff_route_id is null
       and dwp.default_dropoff_route_number is not null
     order by dwp.default_dropoff_order nulls last, se.created_at
@@ -787,6 +787,9 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_stay_id uuid;
+  v_day date;
 begin
   update schedule_entries se
   set pickup_status = 'picked_up',
@@ -799,10 +802,18 @@ begin
     and se.pickup_route_id = r.id
     and r.employee_id = current_employee_id()
     and r.status = 'in_progress'
-    and r.clocked_out_at is null;
+    and r.clocked_out_at is null
+  returning se.boarding_entry_id, se.check_in_date into v_stay_id, v_day;
 
   if not found then
     raise exception 'Schedule entry not found, not on your route, or you are not clocked in';
+  end if;
+
+  if v_stay_id is not null then
+    update schedule_entries
+    set pickup_status = 'picked_up', actual_pickup_at = now(),
+        belongings_notes = coalesce(p_belongings, belongings_notes), updated_at = now()
+    where id = v_stay_id and check_in_date = v_day;
   end if;
 end;
 $$;
@@ -813,6 +824,9 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_stay_id uuid;
+  v_day date;
 begin
   update schedule_entries se
   set dropoff_status = 'dropped_off',
@@ -824,10 +838,17 @@ begin
     and se.dropoff_route_id = r.id
     and r.employee_id = current_employee_id()
     and r.status = 'in_progress'
-    and r.clocked_out_at is null;
+    and r.clocked_out_at is null
+  returning se.boarding_entry_id, se.check_in_date into v_stay_id, v_day;
 
   if not found then
     raise exception 'Schedule entry not found, not on your route, or you are not clocked in';
+  end if;
+
+  if v_stay_id is not null then
+    update schedule_entries
+    set dropoff_status = 'dropped_off', actual_dropoff_at = now(), updated_at = now()
+    where id = v_stay_id and check_out_date = v_day and after_hours_dropoff = false;
   end if;
 end;
 $$;
@@ -920,58 +941,48 @@ grant execute on function submit_daily_report(uuid, text, text, text) to authent
 -- BOARDING (admin books stays; employees log after-hours transports)
 -- ==========================================================================
 
--- Cancels (p_cancel) or restores the dog's regular hikes on the given days.
--- When cancelling a day that has no hike entry yet but is on the dog's weekly
--- pattern, inserts it already cancelled so the monthly backfill won't add an
--- active one later.
-create function set_boarding_hikes(p_dog_id uuid, p_dates date[], p_cancel boolean)
+-- Undoes a stay's hikes for days not yet picked up: a usual hike day goes back
+-- to the owner's address, an extra day is removed. Also restores regular hikes
+-- that older bookings cancelled with reason 'boarding'. Internal: callers
+-- check permissions.
+create function clear_boarding_hikes(p_entry_id uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_day date;
+  v_stay schedule_entries%rowtype;
 begin
-  if not is_admin() then
-    raise exception 'Only admin can manage boarding';
+  select * into v_stay from schedule_entries where id = p_entry_id and type = 'boarding';
+  if not found then
+    return;
   end if;
 
-  foreach v_day in array p_dates loop
-    if p_cancel then
-      update schedule_entries
-      set cancelled = true, cancel_reason = 'boarding',
-          pickup_route_id = null, pickup_route_order = null,
-          dropoff_route_id = null, dropoff_route_order = null,
-          updated_at = now()
-      where dog_id = p_dog_id and type = 'hike' and check_in_date = v_day and cancelled = false;
+  update schedule_entries
+  set cancelled = false, cancel_reason = null, updated_at = now()
+  where dog_id = v_stay.dog_id and type = 'hike'
+    and check_in_date in (v_stay.check_in_date, v_stay.check_out_date)
+    and cancelled = true and cancel_reason = 'boarding';
 
-      insert into schedule_entries (
-        dog_id, type, check_in_date, check_out_date, scheduled_pickup_date, scheduled_dropoff_date,
-        cancelled, cancel_reason
-      )
-      select p_dog_id, 'hike', v_day, v_day, v_day, v_day, true, 'boarding'
-      from dog_weekly_pattern dwp
-      where dwp.dog_id = p_dog_id and dwp.day_of_week = extract(dow from v_day)
-        and not exists (
-          select 1 from schedule_entries se
-          where se.dog_id = p_dog_id and se.type = 'hike' and se.check_in_date = v_day
-        );
-    else
-      update schedule_entries
-      set cancelled = false, cancel_reason = null, updated_at = now()
-      where dog_id = p_dog_id and type = 'hike' and check_in_date = v_day
-        and cancelled = true and cancel_reason = 'boarding';
-    end if;
-  end loop;
+  update schedule_entries se
+  set pickup_at_jaimes = false, dropoff_at_jaimes = false, boarding_entry_id = null, updated_at = now()
+  where se.boarding_entry_id = p_entry_id
+    and se.pickup_status = 'pending'
+    and exists (
+      select 1 from dog_weekly_pattern dwp
+      where dwp.dog_id = se.dog_id and dwp.day_of_week = extract(dow from se.check_in_date)
+    );
+
+  delete from schedule_entries
+  where boarding_entry_id = p_entry_id and pickup_status = 'pending';
 end;
 $$;
 
--- A boarding dog hikes every day it's at Jaime's.
--- p_on: give every middle day of the stay a hike at Jaime's. Otherwise: undo
--- that for days not yet picked up -- a usual hike day goes back to the
--- owner's address, an extra day is removed.
-create function set_boarding_stay_hikes(p_entry_id uuid, p_on boolean)
+-- Gives each day of an active stay its hike, per the table at the top. Uses
+-- the dog's regular hike that day if there is one (unless it's cancelled for
+-- another reason, e.g. vet), otherwise adds one. Internal.
+create function build_boarding_hikes(p_entry_id uuid)
 returns void
 language plpgsql
 security definer
@@ -980,50 +991,43 @@ as $$
 declare
   v_stay schedule_entries%rowtype;
   v_day date;
+  v_pickup_jaimes boolean;
+  v_dropoff_jaimes boolean;
 begin
-  if not is_admin() then
-    raise exception 'Only admin can manage boarding';
-  end if;
-
-  select * into v_stay from schedule_entries where id = p_entry_id and type = 'boarding';
+  select * into v_stay from schedule_entries where id = p_entry_id and type = 'boarding' and cancelled = false;
   if not found then
-    raise exception 'Boarding not found';
+    return;
   end if;
 
-  if p_on then
-    v_day := v_stay.check_in_date + 1;
-    while v_day < v_stay.check_out_date loop
+  v_day := v_stay.check_in_date;
+  while v_day <= v_stay.check_out_date loop
+    v_pickup_jaimes := v_day > v_stay.check_in_date;
+    v_dropoff_jaimes := v_day < v_stay.check_out_date or v_stay.after_hours_dropoff;
+
+    if not (v_day = v_stay.check_in_date and v_stay.after_hours_pickup) then
       update schedule_entries
-      set pickup_at_jaimes = true, dropoff_at_jaimes = true, boarding_entry_id = p_entry_id, updated_at = now()
+      set pickup_at_jaimes = v_pickup_jaimes, dropoff_at_jaimes = v_dropoff_jaimes,
+          boarding_entry_id = p_entry_id, updated_at = now()
       where dog_id = v_stay.dog_id and type = 'hike' and check_in_date = v_day and cancelled = false;
 
       insert into schedule_entries (
         dog_id, type, check_in_date, check_out_date, scheduled_pickup_date, scheduled_dropoff_date,
         pickup_at_jaimes, dropoff_at_jaimes, boarding_entry_id
       )
-      select v_stay.dog_id, 'hike', v_day, v_day, v_day, v_day, true, true, p_entry_id
+      select v_stay.dog_id, 'hike', v_day, v_day, v_day, v_day, v_pickup_jaimes, v_dropoff_jaimes, p_entry_id
       where not exists (
         select 1 from schedule_entries se
         where se.dog_id = v_stay.dog_id and se.type = 'hike' and se.check_in_date = v_day
       );
+    end if;
 
-      v_day := v_day + 1;
-    end loop;
-  else
-    update schedule_entries se
-    set pickup_at_jaimes = false, dropoff_at_jaimes = false, boarding_entry_id = null, updated_at = now()
-    where se.boarding_entry_id = p_entry_id
-      and se.pickup_status = 'pending'
-      and exists (
-        select 1 from dog_weekly_pattern dwp
-        where dwp.dog_id = se.dog_id and dwp.day_of_week = extract(dow from se.check_in_date)
-      );
-
-    delete from schedule_entries
-    where boarding_entry_id = p_entry_id and pickup_status = 'pending';
-  end if;
+    v_day := v_day + 1;
+  end loop;
 end;
 $$;
+
+revoke execute on function clear_boarding_hikes(uuid) from public, anon, authenticated;
+revoke execute on function build_boarding_hikes(uuid) from public, anon, authenticated;
 
 create function book_boarding(p_dog_id uuid, p_check_in date, p_check_out date)
 returns uuid
@@ -1047,8 +1051,7 @@ begin
   values (p_dog_id, 'boarding', p_check_in, p_check_out, p_check_in, p_check_out)
   returning id into v_id;
 
-  perform set_boarding_hikes(p_dog_id, array[p_check_in, p_check_out], true);
-  perform set_boarding_stay_hikes(v_id, true);
+  perform build_boarding_hikes(v_id);
   return v_id;
 end;
 $$;
@@ -1074,19 +1077,13 @@ begin
     raise exception 'Boarding not found';
   end if;
 
-  perform set_boarding_hikes(v_entry.dog_id, array[v_entry.check_in_date, v_entry.check_out_date], false);
-  perform set_boarding_stay_hikes(p_entry_id, false);
+  perform clear_boarding_hikes(p_entry_id);
 
   update schedule_entries
   set check_in_date = p_check_in,
       check_out_date = p_check_out,
       scheduled_pickup_date = p_check_in,
       scheduled_dropoff_date = p_check_out,
-      -- A leg on a different day needs placing on that day's route afresh.
-      pickup_route_id = case when p_check_in = v_entry.check_in_date then pickup_route_id end,
-      pickup_route_order = case when p_check_in = v_entry.check_in_date then pickup_route_order end,
-      dropoff_route_id = case when p_check_out = v_entry.check_out_date then dropoff_route_id end,
-      dropoff_route_order = case when p_check_out = v_entry.check_out_date then dropoff_route_order end,
       updated_at = now()
   where id = p_entry_id;
 
@@ -1096,8 +1093,7 @@ begin
   update after_hours_transports set date = p_check_out
   where schedule_entry_id = p_entry_id and kind = 'dropoff' and date = v_entry.check_out_date;
 
-  perform set_boarding_hikes(v_entry.dog_id, array[p_check_in, p_check_out], true);
-  perform set_boarding_stay_hikes(p_entry_id, true);
+  perform build_boarding_hikes(p_entry_id);
 end;
 $$;
 
@@ -1107,25 +1103,20 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_entry schedule_entries%rowtype;
 begin
   if not is_admin() then
     raise exception 'Only admin can manage boarding';
   end if;
 
-  select * into v_entry from schedule_entries where id = p_entry_id and type = 'boarding';
+  perform 1 from schedule_entries where id = p_entry_id and type = 'boarding';
   if not found then
     raise exception 'Boarding not found';
   end if;
 
-  perform set_boarding_hikes(v_entry.dog_id, array[v_entry.check_in_date, v_entry.check_out_date], false);
-  perform set_boarding_stay_hikes(p_entry_id, false);
+  perform clear_boarding_hikes(p_entry_id);
   delete from after_hours_transports where schedule_entry_id = p_entry_id;
   update schedule_entries
   set cancelled = true, cancel_reason = 'other',
-      pickup_route_id = null, pickup_route_order = null,
-      dropoff_route_id = null, dropoff_route_order = null,
       after_hours_pickup = false, after_hours_dropoff = false,
       updated_at = now()
   where id = p_entry_id;
@@ -1155,15 +1146,13 @@ begin
   on conflict (schedule_entry_id, kind)
   do update set date = excluded.date, time = excluded.time, employee_id = excluded.employee_id;
 
+  perform clear_boarding_hikes(p_entry_id);
   if p_kind = 'pickup' then
-    update schedule_entries
-    set after_hours_pickup = true, pickup_route_id = null, pickup_route_order = null, updated_at = now()
-    where id = p_entry_id;
+    update schedule_entries set after_hours_pickup = true, updated_at = now() where id = p_entry_id;
   else
-    update schedule_entries
-    set after_hours_dropoff = true, dropoff_route_id = null, dropoff_route_order = null, updated_at = now()
-    where id = p_entry_id;
+    update schedule_entries set after_hours_dropoff = true, updated_at = now() where id = p_entry_id;
   end if;
+  perform build_boarding_hikes(p_entry_id);
 end;
 $$;
 
@@ -1180,11 +1169,13 @@ begin
   end if;
 
   delete from after_hours_transports where schedule_entry_id = p_entry_id and kind = p_kind;
+  perform clear_boarding_hikes(p_entry_id);
   if p_kind = 'pickup' then
     update schedule_entries set after_hours_pickup = false, updated_at = now() where id = p_entry_id;
   elsif p_kind = 'dropoff' then
     update schedule_entries set after_hours_dropoff = false, updated_at = now() where id = p_entry_id;
   end if;
+  perform build_boarding_hikes(p_entry_id);
 end;
 $$;
 
@@ -1219,8 +1210,6 @@ begin
 end;
 $$;
 
-grant execute on function set_boarding_hikes(uuid, date[], boolean) to authenticated;
-grant execute on function set_boarding_stay_hikes(uuid, boolean) to authenticated;
 grant execute on function book_boarding(uuid, date, date) to authenticated;
 grant execute on function change_boarding_dates(uuid, date, date) to authenticated;
 grant execute on function cancel_boarding(uuid) to authenticated;
