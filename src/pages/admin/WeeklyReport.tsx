@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { Modal } from '@/components/ui/Modal'
+import { Input } from '@/components/ui/Field'
 import { downloadCSV, downloadText } from '@/lib/csv'
 import { computePayroll, formatClockTime, formatDecimalHours, formatDuration } from '@/lib/payroll'
 import type { DailyReport, Dog, Employee, Route, ScheduleEntry } from '@/types/database'
@@ -58,6 +60,8 @@ export function WeeklyReport() {
   const [reports, setReports] = useState<ReportWithEmployee[]>([])
   const [patternByDog, setPatternByDog] = useState<Map<string, Set<number>>>(new Map())
   const [loading, setLoading] = useState(true)
+  // The employee + day whose clock times admin is fixing.
+  const [editingDay, setEditingDay] = useState<{ employeeId: string; name: string; date: string } | null>(null)
 
   const weekEnd = addDays(weekStart, 6)
   const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -479,6 +483,7 @@ export function WeeklyReport() {
                     <th className="pb-1 font-semibold">Clock out</th>
                     <th className="pb-1 text-right font-semibold">Time</th>
                     <th className="pb-1 text-right font-semibold">Hours</th>
+                    <th className="pb-1" />
                   </tr>
                 </thead>
                 <tbody>
@@ -497,6 +502,14 @@ export function WeeklyReport() {
                           No clock-out
                         </td>
                       )}
+                      <td className="py-1.5 pl-2 text-right">
+                        <button
+                          onClick={() => setEditingDay({ employeeId: emp.employeeId, name: emp.name, date: d.date })}
+                          className="rounded-lg px-2 py-0.5 text-xs font-semibold text-ocean-600 hover:bg-ocean-100"
+                        >
+                          Edit
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -505,6 +518,115 @@ export function WeeklyReport() {
           </div>
         ))}
       </Section>
+
+      <Modal
+        open={!!editingDay}
+        onClose={() => setEditingDay(null)}
+        title={editingDay ? `${editingDay.name} — ${formatDate(editingDay.date)}` : ''}
+      >
+        {editingDay && (
+          <ClockTimesForm
+            routes={routes.filter((r) => r.employee_id === editingDay.employeeId && r.date === editingDay.date)}
+            onSaved={(updated) => {
+              setRoutes((prev) => prev.map((r) => updated.find((u) => u.id === r.id) ?? r))
+              setEditingDay(null)
+            }}
+          />
+        )}
+      </Modal>
+    </div>
+  )
+}
+
+/** ISO timestamp -> "08:25" in local time, for a time input. */
+function toTimeInput(iso: string | null) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** "2026-10-05" + "08:25" (local time) -> ISO timestamp, or null when the time is blank. */
+function fromTimeInput(date: string, time: string) {
+  return time ? new Date(`${date}T${time}:00`).toISOString() : null
+}
+
+/**
+ * Lets admin fix an employee's clock-in / clock-out when they forgot to clock
+ * or tapped at the wrong time. One pair of times per route that day.
+ */
+function ClockTimesForm({
+  routes,
+  onSaved,
+}: {
+  routes: RouteWithEmployee[]
+  onSaved: (updated: RouteWithEmployee[]) => void
+}) {
+  const [times, setTimes] = useState(() =>
+    routes.map((r) => ({ id: r.id, clockIn: toTimeInput(r.clocked_in_at), clockOut: toTimeInput(r.clocked_out_at) }))
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function setTime(id: string, field: 'clockIn' | 'clockOut', value: string) {
+    setTimes((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)))
+  }
+
+  async function handleSave() {
+    for (const t of times) {
+      if (t.clockOut && !t.clockIn) return setError('Add a clock-in time before a clock-out time.')
+      if (t.clockIn && t.clockOut && t.clockOut <= t.clockIn) return setError('Clock-out must be after clock-in.')
+    }
+    setSaving(true)
+    setError(null)
+    const updated: RouteWithEmployee[] = []
+    for (const route of routes) {
+      const t = times.find((x) => x.id === route.id)!
+      const clocked_in_at = fromTimeInput(route.date, t.clockIn)
+      const clocked_out_at = fromTimeInput(route.date, t.clockOut)
+      // Leave untouched routes alone so their seconds aren't lost.
+      if (t.clockIn === toTimeInput(route.clocked_in_at) && t.clockOut === toTimeInput(route.clocked_out_at)) continue
+      const { error } = await supabase.from('routes').update({ clocked_in_at, clocked_out_at }).eq('id', route.id)
+      if (error) {
+        setSaving(false)
+        return setError(error.message)
+      }
+      updated.push({ ...route, clocked_in_at, clocked_out_at })
+    }
+    setSaving(false)
+    onSaved(updated)
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-ocean-700/70">
+        Fix the times if the employee forgot to clock in or out, or clocked at the wrong time. Payroll updates right away.
+      </p>
+      {routes.map((route) => {
+        const t = times.find((x) => x.id === route.id)!
+        return (
+          <div key={route.id}>
+            {routes.length > 1 && <p className="mb-2 font-display font-bold text-ocean-800">Route {route.route_number}</p>}
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                type="time"
+                label="Clock in"
+                value={t.clockIn}
+                onChange={(e) => setTime(route.id, 'clockIn', e.target.value)}
+              />
+              <Input
+                type="time"
+                label="Clock out"
+                value={t.clockOut}
+                onChange={(e) => setTime(route.id, 'clockOut', e.target.value)}
+              />
+            </div>
+          </div>
+        )
+      })}
+      {error && <p className="text-sm font-semibold text-ocean-700">{error}</p>}
+      <Button onClick={handleSave} disabled={saving} fullWidth>
+        {saving ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Save times'}
+      </Button>
     </div>
   )
 }
