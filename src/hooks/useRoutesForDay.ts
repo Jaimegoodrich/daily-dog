@@ -61,12 +61,13 @@ export function useRoutesForDay(date: string) {
   }, [date])
 
   async function setRouteEmployee(routeNumber: number, employeeId: string) {
-    const existing = routes.find((r) => r.route_number === routeNumber)
-    if (existing) {
-      await supabase.from('routes').update({ employee_id: employeeId || null }).eq('id', existing.id)
-    } else if (employeeId) {
-      await supabase.from('routes').insert({ date, route_number: routeNumber, employee_id: employeeId })
-    }
+    // Also passes the new driver on to later weeks already set up.
+    const { error } = await supabase.rpc('set_route_employee', {
+      p_date: date,
+      p_route_number: routeNumber,
+      p_employee_id: employeeId || null,
+    })
+    if (error) alert(`Couldn't change the driver: ${error.message}`)
     load(false)
   }
 

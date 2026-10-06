@@ -435,6 +435,8 @@ begin
   else
     raise exception 'p_field must be pickup or dropoff';
   end if;
+
+  perform carry_routes_forward(v_route.date, p_field);
 end;
 $$;
 
@@ -465,6 +467,94 @@ $$;
 
 grant execute on function save_route_as_default(uuid, text) to authenticated;
 grant execute on function clear_default_route(uuid, int, text) to authenticated;
+
+-- Re-places regular dogs' pickups (or dropoffs) on already-set-up occurrences
+-- of p_date's weekday after p_date. Internal: callers check permissions.
+create function carry_routes_forward(p_date date, p_field text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_dow int := extract(dow from p_date);
+  v_date date;
+begin
+  for v_date in
+    select distinct date from routes
+    where date > p_date and date >= current_date - 1 and extract(dow from date) = v_dow
+  loop
+    if p_field = 'pickup' then
+      update schedule_entries se
+      set pickup_route_id = null, pickup_route_order = null
+      from routes r, dog_weekly_pattern dwp
+      where se.pickup_route_id = r.id and r.date = v_date and r.status = 'pending'
+        and se.type = 'hike' and se.pickup_status = 'pending'
+        and dwp.dog_id = se.dog_id and dwp.day_of_week = v_dow;
+    else
+      update schedule_entries se
+      set dropoff_route_id = null, dropoff_route_order = null
+      from routes r, dog_weekly_pattern dwp
+      where se.dropoff_route_id = r.id and r.date = v_date and r.status = 'pending'
+        and se.type = 'hike' and se.dropoff_status = 'pending'
+        and dwp.dog_id = se.dog_id and dwp.day_of_week = v_dow;
+    end if;
+    perform apply_default_routes_for_date(v_date);
+  end loop;
+end;
+$$;
+
+revoke execute on function carry_routes_forward(date, text) from public, anon, authenticated;
+
+-- Sets who drives a route on a day (creating the route if needed), and passes
+-- the change on to later occurrences of that weekday already set up that
+-- still have the old driver. A later week deliberately given someone else
+-- keeps them.
+create function set_route_employee(p_date date, p_route_number int, p_employee_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_old_employee_id uuid;
+  v_existed boolean;
+  v_date date;
+begin
+  if not is_admin() then
+    raise exception 'Only admin can assign routes';
+  end if;
+
+  select employee_id into v_old_employee_id from routes where date = p_date and route_number = p_route_number;
+  v_existed := found;
+
+  if v_existed then
+    update routes set employee_id = p_employee_id where date = p_date and route_number = p_route_number;
+  elsif p_employee_id is not null then
+    insert into routes (date, route_number, employee_id) values (p_date, p_route_number, p_employee_id);
+  else
+    return;
+  end if;
+
+  for v_date in
+    select distinct date from routes
+    where date > p_date and date >= current_date - 1 and extract(dow from date) = extract(dow from p_date)
+  loop
+    update routes set employee_id = p_employee_id
+    where date = v_date and route_number = p_route_number and status = 'pending'
+      and employee_id is not distinct from v_old_employee_id;
+    -- A route that didn't exist when that day was set up gets added, and its
+    -- regular dogs slotted onto it.
+    if not v_existed and p_employee_id is not null then
+      insert into routes (date, route_number, employee_id) values (v_date, p_route_number, p_employee_id)
+      on conflict (date, route_number) do nothing;
+      perform apply_default_routes_for_date(v_date);
+    end if;
+  end loop;
+end;
+$$;
+
+grant execute on function set_route_employee(date, int, uuid) to authenticated;
 
 -- Fills in pickup_route_id/dropoff_route_id for any of the date's hike
 -- entries that are missing one, using each dog's default route number for
