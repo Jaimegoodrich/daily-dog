@@ -117,64 +117,62 @@ export function RouteRun() {
 
       {route.status === 'pending' && (
         <Card className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-ocean-800">Clock in to start your route.</p>
+          <p className="text-ocean-800">Look over your route below — clock in when you're ready to start.</p>
           <Button onClick={handleClockIn} disabled={starting}>
             {starting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : "☀️ Let's Start the Day!"}
           </Button>
         </Card>
       )}
 
-      {route.status !== 'pending' && (
-        <>
-          <Section title="🚗 Pick Up">
-            {pickups.map((entry) => (
-              <PickupCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
-            ))}
-            {pickups.length === 0 && <EmptyRow text="No pickups on this route." />}
-          </Section>
+      {/* The route is viewable before clocking in so employees can check it
+          ahead of time; logging only unlocks once they clock in. */}
+      <Section title="🚗 Pick Up">
+        {pickups.map((entry) => (
+          <PickupCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
+        ))}
+        {pickups.length === 0 && <EmptyRow text="No pickups on this route." />}
+      </Section>
 
-          <Section title="🏞️ Farm">
-            <FarmTimes route={route} onLogged={load} />
-          </Section>
+      <Section title="🏞️ Farm">
+        <FarmTimes route={route} readOnly={route.status === 'pending'} onLogged={load} />
+      </Section>
 
-          <Section title="🏠 Drop Off">
-            {dropoffs.map((entry) => (
-              <DropoffCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
-            ))}
-            {dropoffs.length === 0 && <EmptyRow text="No dropoffs on this route." />}
-          </Section>
+      <Section title="🏠 Drop Off">
+        {dropoffs.map((entry) => (
+          <DropoffCard key={entry.id} entry={entry} canLog={canLog} onLogged={load} />
+        ))}
+        {dropoffs.length === 0 && <EmptyRow text="No dropoffs on this route." />}
+      </Section>
 
-          {canLog && (
-            <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
-              <p className="text-ocean-800">
-                {allDroppedOff
-                  ? 'All dogs dropped off — fill out your end of shift report.'
-                  : `${pendingDropoffs} drop-off${pendingDropoffs === 1 ? '' : 's'} left before your end of shift report.`}
-              </p>
-              <Button disabled={!allDroppedOff} onClick={() => navigate(`/end-of-shift/${routeId}`)}>
-                End of Shift Report
-              </Button>
-            </Card>
-          )}
+      {canLog && (
+        <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
+          <p className="text-ocean-800">
+            {allDroppedOff
+              ? 'All dogs dropped off — fill out your end of shift report.'
+              : `${pendingDropoffs} drop-off${pendingDropoffs === 1 ? '' : 's'} left before your end of shift report.`}
+          </p>
+          <Button disabled={!allDroppedOff} onClick={() => navigate(`/end-of-shift/${routeId}`)}>
+            End of Shift Report
+          </Button>
+        </Card>
+      )}
 
-          {/* Routes from before clock-in existed have nothing to clock out of. */}
-          {route.status === 'completed' && route.clocked_in_at && !clockedOut && (
-            <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
-              <p className="text-ocean-800">Report sent — last step is to clock out.</p>
-              <Button disabled={clockingOut} onClick={handleClockOut}>
-                {clockingOut ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Route finished! Clock out!'}
-              </Button>
-            </Card>
-          )}
+      {/* Routes from before clock-in existed have nothing to clock out of. */}
+      {route.status === 'completed' && route.clocked_in_at && !clockedOut && (
+        <Card className="mt-6 flex flex-wrap items-center justify-between gap-3 bg-sun-50">
+          <p className="text-ocean-800">Report sent — last step is to clock out.</p>
+          <Button disabled={clockingOut} onClick={handleClockOut}>
+            {clockingOut ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Route finished! Clock out!'}
+          </Button>
+        </Card>
+      )}
 
-          {clockedOut && (
-            <Card className="mt-6 flex flex-col items-center gap-3 bg-ocean-50 py-8 text-center">
-              <PawPrint className="h-14 w-14 text-ocean-500" />
-              <p className="font-display text-3xl font-extrabold text-ocean-900">You're Awesome!</p>
-              <Button onClick={() => navigate('/today')}>Back to Today</Button>
-            </Card>
-          )}
-        </>
+      {clockedOut && (
+        <Card className="mt-6 flex flex-col items-center gap-3 bg-ocean-50 py-8 text-center">
+          <PawPrint className="h-14 w-14 text-ocean-500" />
+          <p className="font-display text-3xl font-extrabold text-ocean-900">You're Awesome!</p>
+          <Button onClick={() => navigate('/today')}>Back to Today</Button>
+        </Card>
       )}
     </div>
   )
@@ -241,7 +239,7 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' })
 }
 
-function FarmTimes({ route, onLogged }: { route: Route; onLogged: () => void }) {
+function FarmTimes({ route, readOnly, onLogged }: { route: Route; readOnly: boolean; onLogged: () => void }) {
   const [submitting, setSubmitting] = useState<'arrival' | 'departure' | null>(null)
 
   async function handleArrival() {
@@ -264,7 +262,7 @@ function FarmTimes({ route, onLogged }: { route: Route; onLogged: () => void }) 
         <p className="font-semibold text-ocean-900">Arrived at Farm</p>
         {route.arrived_at_farm_at ? (
           <span className="font-semibold text-green-600">{formatTime(route.arrived_at_farm_at)} ✅</span>
-        ) : (
+        ) : readOnly ? null : (
           <Button onClick={handleArrival} disabled={submitting === 'arrival'}>
             {submitting === 'arrival' ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Log Arrival'}
           </Button>
@@ -274,7 +272,7 @@ function FarmTimes({ route, onLogged }: { route: Route; onLogged: () => void }) 
         <p className="font-semibold text-ocean-900">Left Farm</p>
         {route.left_farm_at ? (
           <span className="font-semibold text-green-600">{formatTime(route.left_farm_at)} ✅</span>
-        ) : (
+        ) : readOnly ? null : (
           <Button onClick={handleDeparture} disabled={submitting === 'departure' || !route.arrived_at_farm_at}>
             {submitting === 'departure' ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : 'Log Departure'}
           </Button>
