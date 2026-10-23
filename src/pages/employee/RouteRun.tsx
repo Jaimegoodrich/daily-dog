@@ -116,12 +116,26 @@ export function RouteRun() {
       {error && <p className="mb-4 text-sm font-semibold text-red-600">{error}</p>}
 
       {route.status === 'pending' && (
-        <Card className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-ocean-800">Look over your route below — clock in when you're ready to start.</p>
-          <Button onClick={handleClockIn} disabled={starting}>
-            {starting ? <Spinner className="h-5 w-5 border-white/40 border-t-white" /> : "☀️ Let's Start the Day!"}
-          </Button>
-        </Card>
+        <div className="mb-6">
+          <p className="mb-3 text-center font-semibold text-sun-800">
+            ⚠️ You are NOT clocked in yet. Look over your route below, then clock in to start.
+          </p>
+          <button
+            onClick={handleClockIn}
+            disabled={starting}
+            className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-4 border-sun-500 bg-sun-400 px-6 py-8 text-ocean-900 shadow-lg shadow-sun-900/20 transition-transform hover:bg-sun-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {starting ? (
+              <Spinner className="h-14 w-14 border-ocean-900/30 border-t-ocean-900" />
+            ) : (
+              <>
+                <ClockIcon className="h-16 w-16" />
+                <span className="font-display text-5xl font-black tracking-wide">CLOCK IN</span>
+                <span className="font-display text-lg font-semibold">☀️ Let's start the day!</span>
+              </>
+            )}
+          </button>
+        </div>
       )}
 
       {/* The route is viewable before clocking in so employees can check it
@@ -195,6 +209,15 @@ function PawPrint({ className }: { className?: string }) {
       <ellipse cx="39" cy="13" rx="6.5" ry="9" transform="rotate(8 39 13)" />
       <ellipse cx="50" cy="26" rx="6.5" ry="8.5" transform="rotate(20 50 26)" />
       <path d="M32 30c-8 0-17 12-17 20 0 6 5 9 10 8 3-.5 5-2 7-2s4 1.5 7 2c5 1 10-2 10-8 0-8-9-20-17-20z" />
+    </svg>
+  )
+}
+
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" className={className}>
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 6.5V12l3.5 2.5" />
     </svg>
   )
 }
