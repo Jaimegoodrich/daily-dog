@@ -75,29 +75,34 @@ export function useRoutesForDay(date: string) {
     await supabase.rpc('save_route_as_default', { p_route_id: routeId, p_field: field })
   }
 
-  async function assign(entryId: string, routeId: string, field: 'pickup' | 'dropoff') {
+  async function assign(entryId: string, routeId: string, fields: ('pickup' | 'dropoff')[]) {
     const entry = entries.find((e) => e.id === entryId)
     if (!entry) return
-    const routeKey = field === 'pickup' ? 'pickup_route_id' : 'dropoff_route_id'
-    const orderKey = field === 'pickup' ? 'pickup_route_order' : 'dropoff_route_order'
-    const previousRouteId = entry[routeKey]
-    const routeEntries = entries.filter((e) => e[routeKey] === routeId)
-    await supabase
-      .from('schedule_entries')
-      .update({ [routeKey]: routeId || null, [orderKey]: routeEntries.length })
-      .eq('id', entryId)
-
-    if (routeId) {
-      await saveDefault(routeId, field)
-    } else {
-      await supabase.rpc('clear_default_route', {
-        p_dog_id: entry.dog_id,
-        p_day_of_week: dayOfWeek(date),
-        p_field: field,
-      })
+    const update: Record<string, string | number | null> = {}
+    const previousRouteIds: Partial<Record<'pickup' | 'dropoff', string | null>> = {}
+    for (const field of fields) {
+      const routeKey = field === 'pickup' ? 'pickup_route_id' : 'dropoff_route_id'
+      const orderKey = field === 'pickup' ? 'pickup_route_order' : 'dropoff_route_order'
+      previousRouteIds[field] = entry[routeKey]
+      update[routeKey] = routeId || null
+      update[orderKey] = entries.filter((e) => e[routeKey] === routeId).length
     }
-    // Close the gap left on the route the dog came off.
-    if (previousRouteId && previousRouteId !== routeId) await saveDefault(previousRouteId, field)
+    await supabase.from('schedule_entries').update(update).eq('id', entryId)
+
+    for (const field of fields) {
+      if (routeId) {
+        await saveDefault(routeId, field)
+      } else {
+        await supabase.rpc('clear_default_route', {
+          p_dog_id: entry.dog_id,
+          p_day_of_week: dayOfWeek(date),
+          p_field: field,
+        })
+      }
+      // Close the gap left on the route the dog came off.
+      const previousRouteId = previousRouteIds[field]
+      if (previousRouteId && previousRouteId !== routeId) await saveDefault(previousRouteId, field)
+    }
     load(false)
   }
 
@@ -110,8 +115,15 @@ export function useRoutesForDay(date: string) {
     load(false)
   }
 
-  const assignPickup = (entryId: string, routeId: string) => assign(entryId, routeId, 'pickup')
-  const assignDropoff = (entryId: string, routeId: string) => assign(entryId, routeId, 'dropoff')
+  // Dogs almost always ride home on the route that picked them up, so moving
+  // a pickup moves that day's drop off with it. Drop offs can still be moved
+  // on their own for the rare split.
+  function assignPickup(entryId: string, routeId: string) {
+    const entry = entries.find((e) => e.id === entryId)
+    const sameDayDropoff = entry?.scheduled_pickup_date === date && entry.scheduled_dropoff_date === date
+    return assign(entryId, routeId, sameDayDropoff ? ['pickup', 'dropoff'] : ['pickup'])
+  }
+  const assignDropoff = (entryId: string, routeId: string) => assign(entryId, routeId, ['dropoff'])
 
   async function reorder(
     list: EntryWithDog[],
