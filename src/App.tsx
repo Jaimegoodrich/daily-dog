@@ -18,6 +18,7 @@ import { WeeklySchedule } from '@/pages/admin/WeeklySchedule'
 import { AdminRoutes } from '@/pages/admin/Routes'
 import { AdminReports } from '@/pages/admin/Reports'
 import { WeeklyReport } from '@/pages/admin/WeeklyReport'
+import { MonthlyReport } from '@/pages/admin/MonthlyReport'
 import { AdminEmployees } from '@/pages/admin/Employees'
 import { ClientList } from '@/pages/admin/clients/ClientList'
 import { ClientForm } from '@/pages/admin/clients/ClientForm'
@@ -41,6 +42,7 @@ function AppRoutes() {
       { to: '/admin/schedule', label: 'Weekly Schedule' },
       { to: '/admin/reports', label: 'Reports' },
       { to: '/admin/weekly-report', label: 'Weekly Report' },
+      { to: '/admin/monthly-report', label: 'Monthly Report' },
       { to: '/admin/employees', label: 'Employees' },
       { to: '/admin/gallery', label: 'Gallery' },
     ]
@@ -56,6 +58,7 @@ function AppRoutes() {
           <Route path="/admin/routes" element={<AdminRoutes />} />
           <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/weekly-report" element={<WeeklyReport />} />
+          <Route path="/admin/monthly-report" element={<MonthlyReport />} />
           <Route path="/admin/employees" element={<AdminEmployees />} />
           <Route path="/admin/gallery" element={<Gallery isAdmin />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
