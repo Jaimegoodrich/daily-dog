@@ -57,29 +57,27 @@ function dayOfWeek(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').getDay()
 }
 
-function ordinal(n: number) {
-  const mod100 = n % 100
-  if (mod100 >= 11 && mod100 <= 13) return `${n}th`
-  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+function dayNumber(dateStr: string) {
+  return String(Number(dateStr.slice(8, 10)))
 }
 
 function monthName(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'long' })
 }
 
-/** "October 2nd" */
+/** "October 2" */
 export function formatDay(dateStr: string) {
-  return `${monthName(dateStr)} ${ordinal(Number(dateStr.slice(8, 10)))}`
+  return `${monthName(dateStr)} ${dayNumber(dateStr)}`
 }
 
-/** "October 2nd, 4th, 5th, November 1st" — the month name only where it changes. */
+/** "October 2, 4, 5, November 1" — the month name only where it changes. */
 export function formatDayList(dates: string[]) {
   let lastMonth = ''
   return [...dates]
     .sort()
     .map((d) => {
       const m = d.slice(0, 7)
-      const day = ordinal(Number(d.slice(8, 10)))
+      const day = dayNumber(d)
       if (m === lastMonth) return day
       lastMonth = m
       return `${monthName(d)} ${day}`
@@ -185,7 +183,7 @@ export function buildMonthlyReport(
   return clients.sort((a, b) => a.clientName.localeCompare(b.clientName))
 }
 
-/** The plain-text paragraph for one dog, e.g. "Mosley: October 2nd, 4th. Cancelled October 9th due to Vet." */
+/** The plain-text paragraph for one dog, e.g. "Mosley: October 2, 4. Cancelled October 9 due to Vet." */
 export function dogReportLines(r: DogMonthReport): string[] {
   const lines: string[] = []
   lines.push(
