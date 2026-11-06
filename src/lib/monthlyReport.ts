@@ -21,8 +21,6 @@ export interface DogStay {
   checkOut: string
   /** Nights of the stay that fall in the report month (the date each night starts). */
   nights: string[]
-  /** Hikes the dog went on during the stay, within the report month. */
-  hikes: string[]
   afterHours: { kind: 'pickup' | 'dropoff'; date: string; time: string }[]
 }
 
@@ -145,23 +143,11 @@ export function buildMonthlyReport(
     for (let d = s.check_in_date; d < s.check_out_date; d = addDays(d, 1)) {
       if (d >= start && d <= end) nights.push(d)
     }
-    const stayHikes = hikes
-      .filter(
-        (h) =>
-          h.dog_id === s.dog_id &&
-          !h.cancelled &&
-          h.check_in_date >= s.check_in_date &&
-          h.check_in_date <= s.check_out_date &&
-          h.check_in_date >= start &&
-          h.check_in_date <= end
-      )
-      .map((h) => h.check_in_date)
-      .sort()
     const afterHours = (s.transports ?? [])
       .filter((t) => t.date >= start && t.date <= end)
       .map((t) => ({ kind: t.kind, date: t.date, time: t.time }))
       .sort((a, b) => a.date.localeCompare(b.date))
-    r.stays.push({ id: s.id, checkIn: s.check_in_date, checkOut: s.check_out_date, nights, hikes: stayHikes, afterHours })
+    r.stays.push({ id: s.id, checkIn: s.check_in_date, checkOut: s.check_out_date, nights, afterHours })
   }
 
   const byClient = new Map<string, ClientMonthReport>()
@@ -205,7 +191,6 @@ export function dogReportLines(r: DogMonthReport): string[] {
           ? `${nightCount} overnight${nightCount === 1 ? '' : 's'} this month (nights of ${formatDayList(s.nights)}).`
           : 'no overnights this month.')
     )
-    if (s.hikes.length > 0) lines.push(`  Hikes during the stay: ${formatDayList(s.hikes)}.`)
     for (const t of s.afterHours) {
       lines.push(`  After-hours ${t.kind} ${formatDay(t.date)} at ${formatTimeOfDay(t.time)}.`)
     }

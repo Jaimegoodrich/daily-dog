@@ -52,6 +52,7 @@ export function MonthlyReport() {
   const [month, setMonth] = useState(currentMonth())
   const [clients, setClients] = useState<ClientMonthReport[] | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [exportingPdf, setExportingPdf] = useState(false)
 
   useEffect(() => {
     let stale = false
@@ -111,6 +112,17 @@ export function MonthlyReport() {
     downloadText(`monthly-report-${month}.txt`, parts.join('\n'))
   }
 
+  async function handleExportPDF() {
+    setExportingPdf(true)
+    try {
+      // Loaded on demand so the PDF library isn't part of every page load.
+      const { buildMonthlyReportPdf } = await import('@/lib/monthlyReportPdf')
+      buildMonthlyReportPdf(clients ?? [], monthLabel(month)).save(`monthly-report-${month}.pdf`)
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   function handleExportCSV() {
     const rows: unknown[][] = [
       [
@@ -155,6 +167,9 @@ export function MonthlyReport() {
         <h1 className="font-display text-2xl font-extrabold text-ocean-900">🗓️ Monthly Report</h1>
         <div className="flex flex-wrap items-center gap-3">
           <Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className="w-48" />
+          <Button variant="ghost" onClick={handleExportPDF} disabled={!clients || clients.length === 0 || exportingPdf}>
+            {exportingPdf ? 'Making PDF…' : '📑 Export PDF'}
+          </Button>
           <Button variant="ghost" onClick={handleExportCSV} disabled={!clients || clients.length === 0}>
             ⬇ Export CSV
           </Button>
