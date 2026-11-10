@@ -24,11 +24,34 @@ export function RouteRun() {
       supabase.from('routes').select('*').eq('id', routeId).single(),
       supabase
         .from('schedule_entries')
-        .select('*, dog:dogs(*, client:clients(*)), stay:schedule_entries!boarding_entry_id(*)')
+        .select('*, dog:dogs(*, client:clients(*))')
         .or(`pickup_route_id.eq.${routeId},dropoff_route_id.eq.${routeId}`),
     ])
+    const rows = (entryData as Omit<EntryWithDog, 'stay'>[] | null) ?? []
+
+    // Stays are looked up by id rather than embedded: a self-referencing
+    // embed can come back as a list, which flagged every dog as boarding.
+    const stayIds = [...new Set(rows.map((e) => e.boarding_entry_id).filter((id): id is string => !!id))]
+    const stays = new Map<string, ScheduleEntry>()
+    if (stayIds.length > 0) {
+      const { data: stayData } = await supabase.from('schedule_entries').select('*').in('id', stayIds)
+      for (const s of (stayData as ScheduleEntry[] | null) ?? []) stays.set(s.id, s)
+    }
+
     setRoute(routeData)
-    setEntries((entryData as EntryWithDog[] | null) ?? [])
+    setEntries(
+      rows.map((e) => {
+        const stay = e.boarding_entry_id ? stays.get(e.boarding_entry_id) : undefined
+        // Only a live booking that covers this day counts as boarding.
+        const active =
+          !!stay &&
+          stay.type === 'boarding' &&
+          !stay.cancelled &&
+          e.check_in_date >= stay.check_in_date &&
+          e.check_in_date <= stay.check_out_date
+        return { ...e, stay: active ? stay : null }
+      })
+    )
   }
 
   useEffect(() => {
