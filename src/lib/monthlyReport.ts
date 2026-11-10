@@ -109,6 +109,21 @@ export function buildMonthlyReport(
   }
   const dogById = new Map(dogs.map((d) => [d.id, d]))
 
+  // A hike is part of a boarding stay if the stay built it, or — for stays
+  // booked before hikes were linked to stays — if it falls within the stay's
+  // dates. The exception is check-in day with an after-hours pickup: the dog
+  // only arrives that evening, so a hike earlier that day is a regular one.
+  const activeStays = stays.filter((s) => !s.cancelled)
+  const isBoardingHike = (e: ScheduleEntry) =>
+    !!e.boarding_entry_id ||
+    activeStays.some(
+      (s) =>
+        s.dog_id === e.dog_id &&
+        e.check_in_date >= s.check_in_date &&
+        e.check_in_date <= s.check_out_date &&
+        !(e.check_in_date === s.check_in_date && s.after_hours_pickup)
+    )
+
   for (const e of hikes) {
     const dog = dogById.get(e.dog_id)
     if (!dog || e.check_in_date < start || e.check_in_date > end) continue
@@ -126,7 +141,7 @@ export function buildMonthlyReport(
     }
     // A hike during a boarding stay is included in the boarding, so it isn't
     // billed (or listed) as a separate hike or add.
-    if (e.boarding_entry_id) continue
+    if (isBoardingHike(e)) continue
     r.hikes.push(e.check_in_date)
     if (!patternByDog.get(e.dog_id)?.has(dayOfWeek(e.check_in_date))) {
       r.adds.push(e.check_in_date)
