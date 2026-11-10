@@ -124,9 +124,11 @@ export function buildMonthlyReport(
       }
       continue
     }
+    // A hike during a boarding stay is included in the boarding, so it isn't
+    // billed (or listed) as a separate hike or add.
+    if (e.boarding_entry_id) continue
     r.hikes.push(e.check_in_date)
-    // Hikes a boarding stay adds are covered under the stay, not as adds.
-    if (!e.boarding_entry_id && !patternByDog.get(e.dog_id)?.has(dayOfWeek(e.check_in_date))) {
+    if (!patternByDog.get(e.dog_id)?.has(dayOfWeek(e.check_in_date))) {
       r.adds.push(e.check_in_date)
     }
   }
